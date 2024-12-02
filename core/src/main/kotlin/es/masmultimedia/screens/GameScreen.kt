@@ -20,6 +20,7 @@ import es.masmultimedia.entities.Enemy
 import es.masmultimedia.entities.Projectile
 import es.masmultimedia.entities.Spaceship
 import es.masmultimedia.game.SimpleSurvivorGame
+import com.badlogic.gdx.graphics.Texture
 
 class GameScreen(private val game: SimpleSurvivorGame) : Screen {
     private lateinit var camera: OrthographicCamera
@@ -29,6 +30,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
     private lateinit var tiledMapRenderer: OrthogonalTiledMapRenderer
     private lateinit var player: Spaceship
     private lateinit var enemy: Enemy
+    private lateinit var enemyTexture: Texture
 
     private var playerSpeed = 200f
     private var gameStartTime = 0L
@@ -58,15 +60,16 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
 
         shapeRenderer = ShapeRenderer()
         spriteBatch = SpriteBatch()
-// Obtener el tamaño del mapa en píxeles
+        // Obtener el tamaño del mapa en píxeles
         val mapWidth =
             tiledMap.properties["width"] as Int * (tiledMap.properties["tilewidth"] as Int)
         val mapHeight =
             tiledMap.properties["height"] as Int * (tiledMap.properties["tileheight"] as Int)
 
-// Centrar al jugador en el mapa
+        // Centrar al jugador en el mapa
         player = Spaceship(Vector2(mapWidth / 2f, mapHeight / 2f))
         enemy = Enemy(Vector2(100f, 100f))
+        enemyTexture = Texture("enemy_01.png")
 
         // Cargar los objetos de colisión desde la capa de objetos "Collisions"
         val collisionLayer = tiledMap.layers.get("Collisions")
@@ -82,7 +85,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
                         collisionRectangles.add(rectangle)
                         Gdx.app.log(
                             "CollisionObject",
-                            "Added collision object at (${rectangle.x}, ${rectangle.y}) with size (${rectangle.width} x ${rectangle.height})"
+                            "Added collision object at (\${rectangle.x}, \${rectangle.y}) with size (\${rectangle.width} x \${rectangle.height})"
                         )
                     }
                 }
@@ -152,8 +155,8 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
         val moveX = movementTouchpad.knobPercentX
         val moveY = movementTouchpad.knobPercentY
 
-// Debug para verificar los valores del joystick
-        Gdx.app.log("Joystick Movimiento", "knobPercentX: $moveX, knobPercentY: $moveY")
+        // Debug para verificar los valores del joystick
+        Gdx.app.log("Joystick Movimiento", "knobPercentX: \$moveX, knobPercentY: \$moveY")
 
         if (movementTouchpad.isTouched) {
             // Cálculo de la dirección del jugador
@@ -162,7 +165,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
                 playerDirection.nor() // Normaliza la dirección
                 Gdx.app.log(
                     "PlayerDirection",
-                    "Direction: ${playerDirection.x}, ${playerDirection.y}"
+                    "Direction: \${playerDirection.x}, \${playerDirection.y}"
                 )
 
                 // Calcula la nueva posición del jugador
@@ -171,7 +174,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
                 // player.position.set(newPosition) // Actualiza la posición
                 Gdx.app.log(
                     "PlayerPosition",
-                    "Position: ${player.position.x}, ${player.position.y}"
+                    "Position: \${player.position.x}, \${player.position.y}"
                 )
 
                 // Limitar la posición para que no se salga del área del juego
@@ -193,7 +196,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
                         collision = true
                         Gdx.app.log(
                             "Collision",
-                            "Collision detected with object at (${rectangle.x}, ${rectangle.y})"
+                            "Collision detected with object at (\${rectangle.x}, \${rectangle.y})"
                         )
                         break
                     }
@@ -204,7 +207,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
                     player.position.set(newPosition)
                     Gdx.app.log(
                         "PlayerPosition",
-                        "Position: ${player.position.x}, ${player.position.y}"
+                        "Position: \${player.position.x}, \${player.position.y}"
                     )
                 }
             }
@@ -267,17 +270,12 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
         spriteBatch.projectionMatrix = camera.combined
         spriteBatch.begin()
         player.render(spriteBatch)
+        spriteBatch.draw(enemyTexture, enemy.position.x, enemy.position.y, 20f, 20f)
         spriteBatch.end()
 
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
 
-        // Dibujar el enemigo si está vivo
-        if (enemy.isAlive()) {
-            shapeRenderer.color = com.badlogic.gdx.graphics.Color.RED
-            shapeRenderer.rect(enemy.position.x, enemy.position.y, 20f, 20f)
-        }
-
-        // Dibujar proyectiles
+        // Dibujar los proyectiles
         shapeRenderer.color = com.badlogic.gdx.graphics.Color.GREEN
         for (projectile in projectiles) {
             shapeRenderer.circle(projectile.position.x, projectile.position.y, 5f)
@@ -305,5 +303,6 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
         tiledMap.dispose()
         shapeRenderer.dispose()
         stage.dispose()
+        enemyTexture.dispose()
     }
 }
