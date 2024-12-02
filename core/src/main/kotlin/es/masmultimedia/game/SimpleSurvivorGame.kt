@@ -13,6 +13,7 @@ import com.badlogic.gdx.maps.tiled.renderers.OrthogonalTiledMapRenderer
 import com.badlogic.gdx.math.Rectangle
 import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.math.Vector3
+import es.masmultimedia.entities.Enemy
 
 class SimpleSurvivorGame : ApplicationAdapter() {
     private lateinit var camera: OrthographicCamera
@@ -21,7 +22,7 @@ class SimpleSurvivorGame : ApplicationAdapter() {
     private lateinit var tiledMap: TiledMap
     private lateinit var tiledMapRenderer: OrthogonalTiledMapRenderer
     private lateinit var playerPosition: Vector2
-    private lateinit var enemyPosition: Vector2
+    private lateinit var enemy: Enemy
 
     private var playerSpeed = 200f
 
@@ -43,7 +44,7 @@ class SimpleSurvivorGame : ApplicationAdapter() {
         shapeRenderer = ShapeRenderer()
         spriteBatch = SpriteBatch()
         playerPosition = Vector2(worldWidth / 2, worldHeight / 2)
-        enemyPosition = Vector2(100f, 100f)
+        enemy = Enemy(Vector2(100f, 100f))
 
         // Cargar los objetos de colisión desde la capa de objetos "Collisions"
         val collisionLayer = tiledMap.layers.get("Collisions")
@@ -52,7 +53,7 @@ class SimpleSurvivorGame : ApplicationAdapter() {
                 if (mapObject is RectangleMapObject) {
                     val rectangle = mapObject.rectangle
 
-// Verificar si el objeto tiene el atributo 'collidable' y si es true
+                    // Verificar si el objeto tiene el atributo 'collidable' y si es true
                     val collidable =
                         mapObject.properties["collidable"]?.let { it as? Boolean } ?: true
                     if (collidable) {
@@ -62,7 +63,6 @@ class SimpleSurvivorGame : ApplicationAdapter() {
                             "Added collision object at (${rectangle.x}, ${rectangle.y}) with size (${rectangle.width} x ${rectangle.height})"
                         )
                     }
-
                 }
             }
         } else {
@@ -115,10 +115,7 @@ class SimpleSurvivorGame : ApplicationAdapter() {
         shapeRenderer.projectionMatrix = camera.combined
 
         // Movimiento del enemigo hacia el jugador
-        val direction =
-            Vector2(playerPosition.x - enemyPosition.x, playerPosition.y - enemyPosition.y)
-        direction.nor()
-        enemyPosition.add(direction.scl(100 * Gdx.graphics.deltaTime))
+        enemy.moveTowards(playerPosition)
 
         // Dibujar jugador y enemigo
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
@@ -129,7 +126,7 @@ class SimpleSurvivorGame : ApplicationAdapter() {
 
         // Dibujar el enemigo
         shapeRenderer.color = com.badlogic.gdx.graphics.Color.RED
-        shapeRenderer.rect(enemyPosition.x, enemyPosition.y, 20f, 20f)
+        shapeRenderer.rect(enemy.position.x, enemy.position.y, 20f, 20f)
 
         shapeRenderer.end()
     }
