@@ -12,7 +12,9 @@ import com.badlogic.gdx.maps.tiled.TmxMapLoader
 import com.badlogic.gdx.maps.tiled.renderers.OrthogonalTiledMapRenderer
 import com.badlogic.gdx.math.Rectangle
 import com.badlogic.gdx.math.Vector2
-import com.badlogic.gdx.math.Vector3
+import com.badlogic.gdx.scenes.scene2d.Stage
+import com.badlogic.gdx.scenes.scene2d.ui.Skin
+import com.badlogic.gdx.scenes.scene2d.ui.Touchpad
 import com.badlogic.gdx.utils.TimeUtils
 import es.masmultimedia.entities.Enemy
 import es.masmultimedia.entities.Projectile
@@ -40,6 +42,10 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
     private var lastShotTime = 0L
     private var lastPlayerDirection = Vector2(1f, 0f) // Default direction to the right
 
+    private lateinit var stage: Stage
+    private lateinit var movementTouchpad: Touchpad
+    private lateinit var rotationTouchpad: Touchpad
+
     override fun show() {
         camera = OrthographicCamera().apply {
             setToOrtho(false, 800f, 600f)
@@ -52,7 +58,14 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
 
         shapeRenderer = ShapeRenderer()
         spriteBatch = SpriteBatch()
-        player = Spaceship(Vector2(worldWidth / 2, worldHeight / 2))
+// Obtener el tamaño del mapa en píxeles
+        val mapWidth =
+            tiledMap.properties["width"] as Int * (tiledMap.properties["tilewidth"] as Int)
+        val mapHeight =
+            tiledMap.properties["height"] as Int * (tiledMap.properties["tileheight"] as Int)
+
+// Centrar al jugador en el mapa
+        player = Spaceship(Vector2(mapWidth / 2f, mapHeight / 2f))
         enemy = Enemy(Vector2(100f, 100f))
 
         // Cargar los objetos de colisión desde la capa de objetos "Collisions"
@@ -79,6 +92,28 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
         }
 
         gameStartTime = TimeUtils.millis()
+
+        // Configurar los joysticks virtuales
+        stage = Stage()
+        Gdx.input.inputProcessor = stage
+
+        val skin = Skin(Gdx.files.internal("uiskin.json"))
+
+        val touchpadStyle = Touchpad.TouchpadStyle().apply {
+            background = skin.getDrawable("default-round")
+            knob = skin.getDrawable("default-round")
+        }
+
+        movementTouchpad = Touchpad(10f, touchpadStyle).apply {
+            setBounds(15f, 15f, 200f, 200f)
+        }
+
+        rotationTouchpad = Touchpad(10f, touchpadStyle).apply {
+            setBounds(Gdx.graphics.width - 215f, 15f, 200f, 200f)
+        }
+
+        stage.addActor(movementTouchpad)
+        stage.addActor(rotationTouchpad)
     }
 
     override fun render(delta: Float) {
@@ -113,36 +148,75 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
         tiledMapRenderer.setView(camera)
         tiledMapRenderer.render()
 
-        // Movimiento del jugador basado en la dirección de la entrada táctil
-        var playerDirection = Vector2.Zero
-        if (Gdx.input.isTouched) {
-            val touchX = Gdx.input.x.toFloat()
-            val touchY = Gdx.input.y.toFloat()
-            val touchPos = camera.unproject(Vector3(touchX, touchY, 0f))
-            playerDirection =
-                Vector2(touchPos.x - player.position.x, touchPos.y - player.position.y).nor()
-            lastPlayerDirection = playerDirection.cpy()
-            val newPosition =
-                player.position.cpy().add(playerDirection.scl(playerSpeed * Gdx.graphics.deltaTime))
+        // Movimiento del jugador basado en el joystick de movimiento
+        val moveX = movementTouchpad.knobPercentX
+        val moveY = movementTouchpad.knobPercentY
 
-            // Comprobar colisiones con los objetos del mapa de Tiled
-            var collision = false
-            for (rectangle in collisionRectangles) {
-                if (rectangle.contains(newPosition.x, newPosition.y)) {
-                    collision = true
+// Debug para verificar los valores del joystick
+        Gdx.app.log("Joystick Movimiento", "knobPercentX: $moveX, knobPercentY: $moveY")
+
+        if (movementTouchpad.isTouched) {
+            // Cálculo de la dirección del jugador
+            val playerDirection = Vector2(moveX, moveY)
+            if (playerDirection.len() > 0) {
+                playerDirection.nor() // Normaliza la dirección
+                Gdx.app.log(
+                    "PlayerDirection",
+                    "Direction: ${playerDirection.x}, ${playerDirection.y}"
+                )
+
+                // Calcula la nueva posición del jugador
+                val newPosition =
+                    player.position.cpy().add(playerDirection.scl(playerSpeed * delta))
+                // player.position.set(newPosition) // Actualiza la posición
+                Gdx.app.log(
+                    "PlayerPosition",
+                    "Position: ${player.position.x}, ${player.position.y}"
+                )
+
+                // Limitar la posición para que no se salga del área del juego
+                newPosition.x = newPosition.x.coerceIn(0f, worldWidth - player.width)
+                newPosition.y = newPosition.y.coerceIn(0f, worldHeight - player.height)
+
+                // Comprobar colisiones con los objetos del mapa de Tiled
+                var collision = false
+                for (rectangle in collisionRectangles) {
+                    if (rectangle.overlaps(
+                            Rectangle(
+                                newPosition.x - player.width / 2,
+                                newPosition.y - player.height / 2,
+                                player.width,
+                                player.height
+                            )
+                        )
+                    ) {
+                        collision = true
+                        Gdx.app.log(
+                            "Collision",
+                            "Collision detected with object at (${rectangle.x}, ${rectangle.y})"
+                        )
+                        break
+                    }
+                }
+
+                // Actualizar la posición del jugador solo si no hay colisión
+                if (!collision) {
+                    player.position.set(newPosition)
                     Gdx.app.log(
-                        "Collision",
-                        "Collision detected with object at (${rectangle.x}, ${rectangle.y})"
+                        "PlayerPosition",
+                        "Position: ${player.position.x}, ${player.position.y}"
                     )
-                    break
                 }
             }
+        }
 
-            // Actualizar la posición del jugador solo si no hay colisión
-            if (!collision) {
-                player.position.set(newPosition)
-                player.rotation = playerDirection.angleDeg() - 90 // Ajustar la rotación para que apunte hacia la dirección del movimiento
-            }
+        // Rotación del jugador basada en el joystick de rotación
+        val rotX = rotationTouchpad.knobPercentX
+        val rotY = rotationTouchpad.knobPercentY
+        if (rotationTouchpad.isTouched && (rotX != 0f || rotY != 0f)) {
+            val rotationDirection = Vector2(rotX, rotY).nor()
+            player.rotation = rotationDirection.angleDeg() - 90
+            lastPlayerDirection = rotationDirection
         }
 
         shapeRenderer.projectionMatrix = camera.combined
@@ -159,12 +233,14 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
 
         // Disparos automáticos
         if (TimeUtils.nanoTime() - lastShotTime > 500_000_000L) { // Disparar cada 0.5 segundos
-            projectiles.add(
-                Projectile(
-                    player.position.cpy(),
-                    lastPlayerDirection.cpy()
-                )
-            ) // Disparar en la última dirección del jugador
+            if (rotationTouchpad.isTouched) {
+                projectiles.add(
+                    Projectile(
+                        player.position.cpy(),
+                        lastPlayerDirection.cpy()
+                    )
+                ) // Disparar en la dirección de la rotación del jugador
+            }
             lastShotTime = TimeUtils.nanoTime()
         }
 
@@ -208,6 +284,10 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
         }
 
         shapeRenderer.end()
+
+        // Dibujar los joysticks
+        stage.act(delta)
+        stage.draw()
     }
 
     override fun resize(width: Int, height: Int) {}
@@ -224,5 +304,6 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
         spriteBatch.dispose()
         tiledMap.dispose()
         shapeRenderer.dispose()
+        stage.dispose()
     }
 }
