@@ -34,6 +34,7 @@ class SimpleSurvivorGame : ApplicationAdapter() {
     private val collisionRectangles = mutableListOf<Rectangle>()
     private val projectiles = mutableListOf<Projectile>()
     private var lastShotTime = 0L
+    private var lastPlayerDirection = Vector2(1f, 0f) // Default direction to the right
 
     override fun create() {
         camera = OrthographicCamera().apply {
@@ -84,12 +85,14 @@ class SimpleSurvivorGame : ApplicationAdapter() {
         tiledMapRenderer.render()
 
         // Movimiento del jugador basado en la dirección de la entrada táctil
+        var playerDirection = Vector2.Zero
         if (Gdx.input.isTouched) {
             val touchX = Gdx.input.x.toFloat()
             val touchY = Gdx.input.y.toFloat()
             val touchPos = camera.unproject(Vector3(touchX, touchY, 0f))
-            val direction = Vector2(touchPos.x - playerPosition.x, touchPos.y - playerPosition.y).nor()
-            val newPosition = playerPosition.cpy().add(direction.scl(playerSpeed * Gdx.graphics.deltaTime))
+            playerDirection = Vector2(touchPos.x - playerPosition.x, touchPos.y - playerPosition.y).nor()
+            lastPlayerDirection = playerDirection.cpy()
+            val newPosition = playerPosition.cpy().add(playerDirection.scl(playerSpeed * Gdx.graphics.deltaTime))
 
             // Comprobar colisiones con los objetos del mapa de Tiled
             var collision = false
@@ -114,7 +117,7 @@ class SimpleSurvivorGame : ApplicationAdapter() {
 
         // Disparos automáticos
         if (TimeUtils.nanoTime() - lastShotTime > 500_000_000L) { // Disparar cada 0.5 segundos
-            projectiles.add(Projectile(playerPosition.cpy(), Vector2(1f, 0f))) // Disparar hacia la derecha por defecto
+            projectiles.add(Projectile(playerPosition.cpy(), lastPlayerDirection.cpy())) // Disparar en la última dirección del jugador
             lastShotTime = TimeUtils.nanoTime()
         }
 
@@ -128,6 +131,12 @@ class SimpleSurvivorGame : ApplicationAdapter() {
                 projectile.position.y > worldHeight || projectile.position.y < 0) {
                 projectileIterator.remove()
             }
+
+            // Comprobar colisiones con el enemigo
+            if (enemy.bounds.contains(projectile.position)) {
+                enemy.takeDamage(projectile.power)
+                projectileIterator.remove()
+            }
         }
 
         // Dibujar jugador, enemigo y proyectiles
@@ -137,9 +146,11 @@ class SimpleSurvivorGame : ApplicationAdapter() {
         shapeRenderer.color = com.badlogic.gdx.graphics.Color.BLUE
         shapeRenderer.circle(playerPosition.x, playerPosition.y, playerRadius)
 
-        // Dibujar el enemigo
-        shapeRenderer.color = com.badlogic.gdx.graphics.Color.RED
-        shapeRenderer.rect(enemy.position.x, enemy.position.y, 20f, 20f)
+        // Dibujar el enemigo si está vivo
+        if (enemy.isAlive()) {
+            shapeRenderer.color = com.badlogic.gdx.graphics.Color.RED
+            shapeRenderer.rect(enemy.position.x, enemy.position.y, 20f, 20f)
+        }
 
         // Dibujar proyectiles
         shapeRenderer.color = com.badlogic.gdx.graphics.Color.GREEN
