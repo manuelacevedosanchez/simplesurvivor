@@ -6,7 +6,7 @@ import com.badlogic.gdx.math.Vector2
 
 class Enemy(initialPosition: Vector2) {
     var position: Vector2 = initialPosition
-    private val speed = 100f
+    private val speed = 50f
     private var health = 100
 
     val bounds: Rectangle

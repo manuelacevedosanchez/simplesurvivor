@@ -27,6 +27,9 @@ class SimpleSurvivorGame : ApplicationAdapter() {
     private lateinit var enemy: Enemy
 
     private var playerSpeed = 200f
+    private var gameStartTime = 0L
+    private var gameEnded = false
+    private var gameWon = false
 
     private val playerRadius = 20f
     private val worldWidth = 1600f
@@ -69,12 +72,32 @@ class SimpleSurvivorGame : ApplicationAdapter() {
         } else {
             Gdx.app.log("CollisionLayer", "No collision layer found")
         }
+
+        gameStartTime = TimeUtils.millis()
     }
 
     override fun render() {
+        if (gameEnded) {
+            // Mostrar mensaje de fin del juego
+            Gdx.gl.glClearColor(0f, 0f, 0f, 1f)
+            Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
+            shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
+            shapeRenderer.color = if (gameWon) com.badlogic.gdx.graphics.Color.GREEN else com.badlogic.gdx.graphics.Color.RED
+            shapeRenderer.circle(400f, 300f, 100f)
+            shapeRenderer.end()
+            return
+        }
+
         // Limpiar la pantalla
         Gdx.gl.glClearColor(0.9f, 0.9f, 0.9f, 1f)
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
+
+        // Verificar condición de victoria
+        if (TimeUtils.timeSinceMillis(gameStartTime) > 120000) { // 2 minutos
+            gameEnded = true
+            gameWon = true
+            return
+        }
 
         // Actualizar la posición de la cámara para mantener al jugador en el centro
         camera.position.set(playerPosition.x, playerPosition.y, 0f)
@@ -114,6 +137,13 @@ class SimpleSurvivorGame : ApplicationAdapter() {
 
         // Movimiento del enemigo hacia el jugador
         enemy.moveTowards(playerPosition)
+
+        // Verificar colisión del enemigo con el jugador (condición de derrota)
+        if (enemy.bounds.contains(playerPosition)) {
+            gameEnded = true
+            gameWon = false
+            return
+        }
 
         // Disparos automáticos
         if (TimeUtils.nanoTime() - lastShotTime > 500_000_000L) { // Disparar cada 0.5 segundos
