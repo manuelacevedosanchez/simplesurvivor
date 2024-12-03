@@ -11,12 +11,26 @@ class Spaceship(initialPosition: Vector2) {
     val width = 40f
     val height = 40f
 
+    // Atributos de salud
+    val maxHealth = 100
+    var currentHealth = maxHealth
+
     fun updateRotation(targetPosition: Vector2) {
-        rotation = Vector2(targetPosition.x - position.x, targetPosition.y - position.y).angleDeg() - 90
+        rotation =
+            Vector2(targetPosition.x - position.x, targetPosition.y - position.y).angleDeg() - 90
     }
 
     fun updatePosition(direction: Vector2, speed: Float, deltaTime: Float) {
         position.add(direction.scl(speed * deltaTime))
+    }
+
+    fun takeDamage(damage: Int) {
+        currentHealth -= damage
+        if (currentHealth < 0) currentHealth = 0
+    }
+
+    fun isAlive(): Boolean {
+        return currentHealth > 0
     }
 
     fun render(batch: SpriteBatch) {

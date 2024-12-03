@@ -155,10 +155,23 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
             enemy.moveTowards(player.position)
 
             // Verificar colisión con el jugador
-            if (enemy.bounds.overlaps(Rectangle(player.position.x - player.width / 2, player.position.y - player.height / 2, player.width, player.height))) {
-                gameEnded = true
-                gameWon = false
-                return
+            if (enemy.bounds.overlaps(
+                    Rectangle(
+                        player.position.x - player.width / 2,
+                        player.position.y - player.height / 2,
+                        player.width,
+                        player.height
+                    )
+                )
+            ) {
+                player.takeDamage(20) // Ajusta el valor de daño según sea necesario
+                enemyIterator.remove() // Remover al enemigo después de colisionar
+                if (!player.isAlive()) {
+                    gameEnded = true
+                    gameWon = false
+                    return
+                }
+                continue
             }
 
             // Verificar colisiones con proyectiles
@@ -209,7 +222,12 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
         }
         spriteBatch.end()
 
+        // Renderizar la barra de vida y los proyectiles con ShapeRenderer
+        shapeRenderer.projectionMatrix = camera.combined
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
+
+        // Dibujar la barra de vida del jugador
+        drawPlayerHealthBar()
 
         // Dibujar los proyectiles
         shapeRenderer.color = com.badlogic.gdx.graphics.Color.GREEN
@@ -233,7 +251,8 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
         val angle = Math.random() * 2 * Math.PI
 
         // Generar una distancia aleatoria dentro del rango
-        val distance = minSpawnDistance + Math.random().toFloat() * (maxSpawnDistance - minSpawnDistance)
+        val distance =
+            minSpawnDistance + Math.random().toFloat() * (maxSpawnDistance - minSpawnDistance)
 
         // Calcular posición de spawn
         val spawnX = player.position.x + distance * Math.cos(angle).toFloat()
@@ -243,6 +262,29 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
         val newEnemy = Enemy(Vector2(spawnX, spawnY))
 
         enemies.add(newEnemy)
+    }
+
+    private fun drawPlayerHealthBar() {
+        // Calcular el porcentaje de salud restante
+        val healthPercentage = player.currentHealth.toFloat() / player.maxHealth.toFloat()
+
+        // Interpolación de color de verde a rojo
+        val healthColor = com.badlogic.gdx.graphics.Color(
+            1 - healthPercentage, // Rojo aumenta a medida que disminuye la salud
+            healthPercentage,     // Verde disminuye a medida que disminuye la salud
+            0f,                   // Azul permanece en 0
+            1f                    // Alpha
+        )
+        shapeRenderer.color = healthColor
+
+        // Dimensiones de la barra de vida
+        val barWidth = player.width
+        val barHeight = 5f
+        val barX = player.position.x - barWidth / 2
+        val barY = player.position.y - player.height / 2 - barHeight - 5f // Debajo de la nave
+
+        // Dibujar la barra de salud
+        shapeRenderer.rect(barX, barY, barWidth * healthPercentage, barHeight)
     }
 
     override fun resize(width: Int, height: Int) {
