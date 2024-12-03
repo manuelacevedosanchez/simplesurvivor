@@ -29,6 +29,8 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
     private var gameStartTime = 0L
     private var gameEnded = false
     private var gameWon = false
+    private var enemiesDefeated = 0
+    private var score = 0
 
     private val enemies = mutableListOf<Enemy>()
     private val projectiles = mutableListOf<Projectile>()
@@ -82,14 +84,14 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
 
     override fun render(delta: Float) {
         if (gameEnded) {
-            // Mostrar mensaje de fin del juego
-            Gdx.gl.glClearColor(0f, 0f, 0f, 1f)
-            Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
-            shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
-            shapeRenderer.color =
-                if (gameWon) com.badlogic.gdx.graphics.Color.GREEN else com.badlogic.gdx.graphics.Color.RED
-            shapeRenderer.circle(400f, 300f, 100f)
-            shapeRenderer.end()
+            // Transicionar a GameOverScreen
+            game.screen = GameOverScreen(
+                game,
+                score,
+                enemiesDefeated,
+                TimeUtils.timeSinceMillis(gameStartTime)
+            )
+            dispose()
             return
         }
 
@@ -183,6 +185,8 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
                     projectileIterator.remove()
                     if (!enemy.isAlive()) {
                         enemyIterator.remove()
+                        enemiesDefeated++
+                        score += 100 // Puedes ajustar el valor de puntuación
                         break
                     }
                 }
