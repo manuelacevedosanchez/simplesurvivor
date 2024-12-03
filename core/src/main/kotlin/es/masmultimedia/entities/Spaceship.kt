@@ -7,7 +7,7 @@ import com.badlogic.gdx.math.Vector2
 class Spaceship(initialPosition: Vector2) {
     var position: Vector2 = initialPosition
     var rotation: Float = 0f
-    private val texture = Texture("spaceship.png")
+    private val texture = Texture("spaceship_base.png")
     val width = 40f
     val height = 40f
 

@@ -4,12 +4,9 @@ import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.Screen
 import com.badlogic.gdx.graphics.GL20
 import com.badlogic.gdx.graphics.OrthographicCamera
+import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer
-import com.badlogic.gdx.maps.objects.RectangleMapObject
-import com.badlogic.gdx.maps.tiled.TiledMap
-import com.badlogic.gdx.maps.tiled.TmxMapLoader
-import com.badlogic.gdx.maps.tiled.renderers.OrthogonalTiledMapRenderer
 import com.badlogic.gdx.math.Rectangle
 import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.scenes.scene2d.Stage
@@ -20,16 +17,12 @@ import es.masmultimedia.entities.Enemy
 import es.masmultimedia.entities.Projectile
 import es.masmultimedia.entities.Spaceship
 import es.masmultimedia.game.SimpleSurvivorGame
-import com.badlogic.gdx.graphics.Texture
 
 class GameScreen(private val game: SimpleSurvivorGame) : Screen {
     private lateinit var camera: OrthographicCamera
     private lateinit var shapeRenderer: ShapeRenderer
     private lateinit var spriteBatch: SpriteBatch
-    private lateinit var tiledMap: TiledMap
-    private lateinit var tiledMapRenderer: OrthogonalTiledMapRenderer
     private lateinit var player: Spaceship
-    private lateinit var enemy: Enemy
     private lateinit var enemyTexture: Texture
 
     private var playerSpeed = 200f
@@ -37,12 +30,12 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
     private var gameEnded = false
     private var gameWon = false
 
-    private val worldWidth = 1600f
-    private val worldHeight = 1200f
-    private val collisionRectangles = mutableListOf<Rectangle>()
+    private val enemies = mutableListOf<Enemy>()
     private val projectiles = mutableListOf<Projectile>()
     private var lastShotTime = 0L
-    private var lastPlayerDirection = Vector2(1f, 0f) // Default direction to the right
+    private var lastEnemySpawnTime = 0L
+    private var enemySpawnInterval = 5000L // Intervalo inicial de 5 segundos
+    private var lastPlayerDirection = Vector2(1f, 0f) // Dirección por defecto hacia la derecha
 
     private lateinit var stage: Stage
     private lateinit var movementTouchpad: Touchpad
@@ -51,50 +44,18 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
     override fun show() {
         camera = OrthographicCamera().apply {
             setToOrtho(false, 800f, 600f)
-            position.set(worldWidth / 2, worldHeight / 2, 0f)
+            position.set(0f, 0f, 0f)
         }
-
-        // Cargar el mapa de Tiled
-        tiledMap = TmxMapLoader().load("level1.tmx")
-        tiledMapRenderer = OrthogonalTiledMapRenderer(tiledMap, 1f)
 
         shapeRenderer = ShapeRenderer()
         spriteBatch = SpriteBatch()
-        // Obtener el tamaño del mapa en píxeles
-        val mapWidth =
-            tiledMap.properties["width"] as Int * (tiledMap.properties["tilewidth"] as Int)
-        val mapHeight =
-            tiledMap.properties["height"] as Int * (tiledMap.properties["tileheight"] as Int)
 
-        // Centrar al jugador en el mapa
-        player = Spaceship(Vector2(mapWidth / 2f, mapHeight / 2f))
-        enemy = Enemy(Vector2(100f, 100f))
+        // Inicializar al jugador en el origen
+        player = Spaceship(Vector2(0f, 0f))
         enemyTexture = Texture("enemy_01.png")
 
-        // Cargar los objetos de colisión desde la capa de objetos "Collisions"
-        val collisionLayer = tiledMap.layers.get("Collisions")
-        if (collisionLayer != null) {
-            for (mapObject in collisionLayer.objects) {
-                if (mapObject is RectangleMapObject) {
-                    val rectangle = mapObject.rectangle
-
-                    // Verificar si el objeto tiene el atributo 'collidable' y si es true
-                    val collidable =
-                        mapObject.properties["collidable"]?.let { it as? Boolean } ?: true
-                    if (collidable) {
-                        collisionRectangles.add(rectangle)
-                        Gdx.app.log(
-                            "CollisionObject",
-                            "Added collision object at (\${rectangle.x}, \${rectangle.y}) with size (\${rectangle.width} x \${rectangle.height})"
-                        )
-                    }
-                }
-            }
-        } else {
-            Gdx.app.log("CollisionLayer", "No collision layer found")
-        }
-
         gameStartTime = TimeUtils.millis()
+        lastEnemySpawnTime = TimeUtils.millis()
 
         // Configurar los joysticks virtuales
         stage = Stage()
@@ -132,8 +93,8 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
             return
         }
 
-        // Limpiar la pantalla
-        Gdx.gl.glClearColor(0.9f, 0.9f, 0.9f, 1f)
+        // Limpiar la pantalla con un fondo negro (espacio)
+        Gdx.gl.glClearColor(0f, 0f, 0f, 1f)
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
 
         // Verificar condición de victoria
@@ -143,73 +104,26 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
             return
         }
 
-        // Actualizar la posición de la cámara para mantener al jugador en el centro
+        // Actualizar la posición de la cámara para seguir al jugador
         camera.position.set(player.position.x, player.position.y, 0f)
         camera.update()
-
-        // Dibujar el mapa de Tiled
-        tiledMapRenderer.setView(camera)
-        tiledMapRenderer.render()
 
         // Movimiento del jugador basado en el joystick de movimiento
         val moveX = movementTouchpad.knobPercentX
         val moveY = movementTouchpad.knobPercentY
-
-        // Debug para verificar los valores del joystick
-        Gdx.app.log("Joystick Movimiento", "knobPercentX: \$moveX, knobPercentY: \$moveY")
 
         if (movementTouchpad.isTouched) {
             // Cálculo de la dirección del jugador
             val playerDirection = Vector2(moveX, moveY)
             if (playerDirection.len() > 0) {
                 playerDirection.nor() // Normaliza la dirección
-                Gdx.app.log(
-                    "PlayerDirection",
-                    "Direction: \${playerDirection.x}, \${playerDirection.y}"
-                )
 
                 // Calcula la nueva posición del jugador
                 val newPosition =
                     player.position.cpy().add(playerDirection.scl(playerSpeed * delta))
-                // player.position.set(newPosition) // Actualiza la posición
-                Gdx.app.log(
-                    "PlayerPosition",
-                    "Position: \${player.position.x}, \${player.position.y}"
-                )
 
-                // Limitar la posición para que no se salga del área del juego
-                newPosition.x = newPosition.x.coerceIn(0f, worldWidth - player.width)
-                newPosition.y = newPosition.y.coerceIn(0f, worldHeight - player.height)
-
-                // Comprobar colisiones con los objetos del mapa de Tiled
-                var collision = false
-                for (rectangle in collisionRectangles) {
-                    if (rectangle.overlaps(
-                            Rectangle(
-                                newPosition.x - player.width / 2,
-                                newPosition.y - player.height / 2,
-                                player.width,
-                                player.height
-                            )
-                        )
-                    ) {
-                        collision = true
-                        Gdx.app.log(
-                            "Collision",
-                            "Collision detected with object at (\${rectangle.x}, \${rectangle.y})"
-                        )
-                        break
-                    }
-                }
-
-                // Actualizar la posición del jugador solo si no hay colisión
-                if (!collision) {
-                    player.position.set(newPosition)
-                    Gdx.app.log(
-                        "PlayerPosition",
-                        "Position: \${player.position.x}, \${player.position.y}"
-                    )
-                }
+                // Actualizar la posición del jugador sin restricciones
+                player.position.set(newPosition)
             }
         }
 
@@ -224,14 +138,42 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
 
         shapeRenderer.projectionMatrix = camera.combined
 
-        // Movimiento del enemigo hacia el jugador
-        enemy.moveTowards(player.position)
+        // Generar enemigos a intervalos regulares
+        if (TimeUtils.timeSinceMillis(lastEnemySpawnTime) > enemySpawnInterval) {
+            spawnEnemy()
+            lastEnemySpawnTime = TimeUtils.millis()
+            // Aumentar la dificultad reduciendo el intervalo
+            if (enemySpawnInterval > 1000L) { // No bajar de 1 segundo
+                enemySpawnInterval -= 100L // Reducir 100 ms cada vez
+            }
+        }
 
-        // Verificar colisión del enemigo con el jugador (condición de derrota)
-        if (enemy.bounds.contains(player.position)) {
-            gameEnded = true
-            gameWon = false
-            return
+        // Actualizar enemigos
+        val enemyIterator = enemies.iterator()
+        while (enemyIterator.hasNext()) {
+            val enemy = enemyIterator.next()
+            enemy.moveTowards(player.position)
+
+            // Verificar colisión con el jugador
+            if (enemy.bounds.overlaps(Rectangle(player.position.x - player.width / 2, player.position.y - player.height / 2, player.width, player.height))) {
+                gameEnded = true
+                gameWon = false
+                return
+            }
+
+            // Verificar colisiones con proyectiles
+            val projectileIterator = projectiles.iterator()
+            while (projectileIterator.hasNext()) {
+                val projectile = projectileIterator.next()
+                if (enemy.bounds.contains(projectile.position)) {
+                    enemy.takeDamage(projectile.power)
+                    projectileIterator.remove()
+                    if (!enemy.isAlive()) {
+                        enemyIterator.remove()
+                        break
+                    }
+                }
+            }
         }
 
         // Disparos automáticos
@@ -252,25 +194,19 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
         while (projectileIterator.hasNext()) {
             val projectile = projectileIterator.next()
             projectile.update()
-            // Remover proyectiles fuera del mundo
-            if (projectile.position.x > worldWidth || projectile.position.x < 0 ||
-                projectile.position.y > worldHeight || projectile.position.y < 0
-            ) {
-                projectileIterator.remove()
-            }
-
-            // Comprobar colisiones con el enemigo
-            if (enemy.bounds.contains(projectile.position)) {
-                enemy.takeDamage(projectile.power)
+            // Remover proyectiles si están muy lejos (opcional)
+            if (projectile.position.dst(player.position) > 1000f) {
                 projectileIterator.remove()
             }
         }
 
-        // Dibujar jugador, enemigo y proyectiles
+        // Dibujar jugador, enemigos y proyectiles
         spriteBatch.projectionMatrix = camera.combined
         spriteBatch.begin()
         player.render(spriteBatch)
-        spriteBatch.draw(enemyTexture, enemy.position.x, enemy.position.y, 20f, 20f)
+        for (enemy in enemies) {
+            spriteBatch.draw(enemyTexture, enemy.position.x, enemy.position.y, 20f, 20f)
+        }
         spriteBatch.end()
 
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
@@ -288,7 +224,31 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
         stage.draw()
     }
 
-    override fun resize(width: Int, height: Int) {}
+    private fun spawnEnemy() {
+        // Distancia mínima y máxima para generar enemigos
+        val minSpawnDistance = 500f
+        val maxSpawnDistance = 1000f
+
+        // Generar un ángulo aleatorio
+        val angle = Math.random() * 2 * Math.PI
+
+        // Generar una distancia aleatoria dentro del rango
+        val distance = minSpawnDistance + Math.random().toFloat() * (maxSpawnDistance - minSpawnDistance)
+
+        // Calcular posición de spawn
+        val spawnX = player.position.x + distance * Math.cos(angle).toFloat()
+        val spawnY = player.position.y + distance * Math.sin(angle).toFloat()
+
+        // Crear nuevo enemigo
+        val newEnemy = Enemy(Vector2(spawnX, spawnY))
+
+        enemies.add(newEnemy)
+    }
+
+    override fun resize(width: Int, height: Int) {
+        // Actualizar el viewport del stage
+        stage.viewport.update(width, height, true)
+    }
 
     override fun pause() {}
 
@@ -297,10 +257,9 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
     override fun hide() {}
 
     override fun dispose() {
-        // Dispose para liberar recursos
+        // Liberar recursos
         player.dispose()
         spriteBatch.dispose()
-        tiledMap.dispose()
         shapeRenderer.dispose()
         stage.dispose()
         enemyTexture.dispose()
