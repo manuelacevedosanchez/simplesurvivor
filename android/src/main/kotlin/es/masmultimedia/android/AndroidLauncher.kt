@@ -15,9 +15,19 @@ class AndroidLauncher : AndroidApplication() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Configurar el UncaughtExceptionHandler
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            Gdx.app.error(
+                "UncaughtException",
+                "Excepción no controlada en el hilo ${thread.name}",
+                throwable
+            )
+            // Opcional: Mostrar un mensaje al usuario o realizar alguna acción adicional
+        }
+
         val config = AndroidApplicationConfiguration().apply {
-            // hideStatusBar = true // Eliminar o comentar esta línea
-            // useImmersiveMode = true // Opcionalmente, comentar esta línea también
+            // hideStatusBar y useImmersiveMode están deprecados, manejaremos el modo inmersivo manualmente
         }
         initialize(SimpleSurvivorGame(), config)
         enterImmersiveMode()
@@ -42,17 +52,11 @@ class AndroidLauncher : AndroidApplication() {
         }
     }
 
-    @Deprecated("Deprecated in Java", ReplaceWith(
-        "Gdx.app.postRunnable { Gdx.input.inputProcessor.keyDown(Input.Keys.BACK) }",
-        "com.badlogic.gdx.Gdx",
-        "com.badlogic.gdx.Gdx",
-        "com.badlogic.gdx.Input"
-    )
-    )
+    @Suppress("DEPRECATION")
     override fun onBackPressed() {
         // No llamar a super.onBackPressed() para evitar que la actividad cierre la aplicación
         Gdx.app.postRunnable {
-            Gdx.input.inputProcessor.keyDown(Input.Keys.BACK)
+            Gdx.input.inputProcessor?.keyDown(Input.Keys.BACK)
         }
     }
 
