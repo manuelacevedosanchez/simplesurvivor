@@ -40,6 +40,7 @@ object GameAssetManager {
             "strong_spaceship.png",
 
             // Texturas de enemigos (Enemies)
+            "enemy_base.png",
             "enemy_normal.png",
             "fast_enemy.png",
             "strong_enemy.png",
