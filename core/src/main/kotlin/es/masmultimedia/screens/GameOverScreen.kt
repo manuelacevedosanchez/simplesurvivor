@@ -1,12 +1,20 @@
 package es.masmultimedia.screens
 
 import com.badlogic.gdx.Gdx
+import com.badlogic.gdx.Input
+import com.badlogic.gdx.InputMultiplexer
+import com.badlogic.gdx.InputProcessor
 import com.badlogic.gdx.Screen
 import com.badlogic.gdx.graphics.GL20
 import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.scenes.scene2d.InputEvent
 import com.badlogic.gdx.scenes.scene2d.Stage
-import com.badlogic.gdx.scenes.scene2d.ui.*
+import com.badlogic.gdx.scenes.scene2d.ui.Dialog
+import com.badlogic.gdx.scenes.scene2d.ui.Label
+import com.badlogic.gdx.scenes.scene2d.ui.Skin
+import com.badlogic.gdx.scenes.scene2d.ui.Table
+import com.badlogic.gdx.scenes.scene2d.ui.TextButton
+import com.badlogic.gdx.scenes.scene2d.ui.TextField
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener
 import com.badlogic.gdx.utils.viewport.ScreenViewport
 import es.masmultimedia.game.SimpleSurvivorGame
@@ -17,14 +25,13 @@ class GameOverScreen(
     private val score: Int,
     private val enemiesDefeated: Int,
     private val timePlayed: Long // Tiempo en milisegundos
-) : Screen {
+) : Screen, InputProcessor {
 
     private val stage = Stage(ScreenViewport())
     private lateinit var backgroundTexture: Texture
     private val highScoreManager = HighScoreManager()
 
     override fun show() {
-        Gdx.input.inputProcessor = stage
         val skin = Skin(Gdx.files.internal("uiskin.json"))
 
         // Crear una tabla para organizar los widgets
@@ -95,6 +102,10 @@ class GameOverScreen(
 
         // Añadir la tabla al stage
         stage.addActor(table)
+
+        // Crear el InputMultiplexer
+        val inputMultiplexer = InputMultiplexer(this, stage)
+        Gdx.input.inputProcessor = inputMultiplexer
     }
 
     private fun checkIfHighScore(score: Int): Boolean {
@@ -132,4 +143,26 @@ class GameOverScreen(
     override fun dispose() {
         stage.dispose()
     }
+
+    override fun keyDown(keycode: Int): Boolean {
+        if (keycode == Input.Keys.BACK || keycode == Input.Keys.ESCAPE) {
+            // Regresar al menú principal
+            game.screen = MainMenuScreen(game)
+            dispose()
+            return true // Indica que el evento ha sido manejado
+        }
+        return false // Permite que el evento pase al siguiente InputProcessor si es necesario
+    }
+
+    override fun keyUp(keycode: Int): Boolean = false
+    override fun keyTyped(character: Char): Boolean = false
+    override fun touchDown(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean = false
+    override fun touchUp(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean = false
+    override fun touchDragged(screenX: Int, screenY: Int, pointer: Int): Boolean = false
+    override fun mouseMoved(screenX: Int, screenY: Int): Boolean = false
+    override fun scrolled(amountX: Float, amountY: Float): Boolean = false
+    override fun touchCancelled(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean {
+        return false
+    }
+
 }

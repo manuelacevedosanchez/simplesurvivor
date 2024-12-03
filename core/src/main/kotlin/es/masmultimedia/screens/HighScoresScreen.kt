@@ -1,6 +1,9 @@
 package es.masmultimedia.screens
 
 import com.badlogic.gdx.Gdx
+import com.badlogic.gdx.Input
+import com.badlogic.gdx.InputMultiplexer
+import com.badlogic.gdx.InputProcessor
 import com.badlogic.gdx.Screen
 import com.badlogic.gdx.graphics.GL20
 import com.badlogic.gdx.scenes.scene2d.InputEvent
@@ -14,7 +17,7 @@ import com.badlogic.gdx.utils.viewport.ScreenViewport
 import es.masmultimedia.game.SimpleSurvivorGame
 import es.masmultimedia.utils.HighScoreManager
 
-class HighScoresScreen(private val game: SimpleSurvivorGame) : Screen {
+class HighScoresScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor {
 
     private val stage = Stage(ScreenViewport())
     private val highScoreManager = HighScoreManager()
@@ -56,6 +59,10 @@ class HighScoresScreen(private val game: SimpleSurvivorGame) : Screen {
 
         // Añadir la tabla al stage
         stage.addActor(table)
+
+        // Set up the InputMultiplexer
+        val inputMultiplexer = InputMultiplexer(this, stage)
+        Gdx.input.inputProcessor = inputMultiplexer
     }
 
     override fun render(delta: Float) {
@@ -77,4 +84,26 @@ class HighScoresScreen(private val game: SimpleSurvivorGame) : Screen {
     override fun dispose() {
         stage.dispose()
     }
+
+    override fun keyDown(keycode: Int): Boolean {
+        if (keycode == Input.Keys.BACK || keycode == Input.Keys.ESCAPE) {
+            // Go back to the main menu
+            game.screen = MainMenuScreen(game)
+            dispose()
+            return true
+        }
+        return false
+    }
+
+    override fun keyUp(keycode: Int): Boolean = false
+    override fun keyTyped(character: Char): Boolean = false
+    override fun touchDown(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean = false
+    override fun touchUp(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean = false
+    override fun touchDragged(screenX: Int, screenY: Int, pointer: Int): Boolean = false
+    override fun mouseMoved(screenX: Int, screenY: Int): Boolean = false
+    override fun scrolled(amountX: Float, amountY: Float): Boolean = false
+    override fun touchCancelled(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean {
+        return false
+    }
+
 }

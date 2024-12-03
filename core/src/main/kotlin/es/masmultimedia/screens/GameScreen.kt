@@ -1,6 +1,9 @@
 package es.masmultimedia.screens
 
 import com.badlogic.gdx.Gdx
+import com.badlogic.gdx.Input
+import com.badlogic.gdx.InputMultiplexer
+import com.badlogic.gdx.InputProcessor
 import com.badlogic.gdx.Screen
 import com.badlogic.gdx.graphics.GL20
 import com.badlogic.gdx.graphics.OrthographicCamera
@@ -10,6 +13,7 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer
 import com.badlogic.gdx.math.Rectangle
 import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.scenes.scene2d.Stage
+import com.badlogic.gdx.scenes.scene2d.ui.Dialog
 import com.badlogic.gdx.scenes.scene2d.ui.Skin
 import com.badlogic.gdx.scenes.scene2d.ui.Touchpad
 import com.badlogic.gdx.utils.TimeUtils
@@ -18,7 +22,7 @@ import es.masmultimedia.entities.Projectile
 import es.masmultimedia.entities.Spaceship
 import es.masmultimedia.game.SimpleSurvivorGame
 
-class GameScreen(private val game: SimpleSurvivorGame) : Screen {
+class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor {
     private lateinit var camera: OrthographicCamera
     private lateinit var shapeRenderer: ShapeRenderer
     private lateinit var spriteBatch: SpriteBatch
@@ -31,9 +35,12 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
     private var gameWon = false
     private var enemiesDefeated = 0
     private var score = 0
+    private var isPaused = false
 
     private val enemies = mutableListOf<Enemy>()
     private val projectiles = mutableListOf<Projectile>()
+    private val skin = Skin(Gdx.files.internal("uiskin.json"))
+
     private var lastShotTime = 0L
     private var lastEnemySpawnTime = 0L
     private var enemySpawnInterval = 5000L // Intervalo inicial de 5 segundos
@@ -80,6 +87,10 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
 
         stage.addActor(movementTouchpad)
         stage.addActor(rotationTouchpad)
+
+        // Set up the InputMultiplexer
+        val inputMultiplexer = InputMultiplexer(this, stage)
+        Gdx.input.inputProcessor = inputMultiplexer
     }
 
     override fun render(delta: Float) {
@@ -92,6 +103,15 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
                 TimeUtils.timeSinceMillis(gameStartTime)
             )
             dispose()
+            return
+        }
+
+        if (isPaused) {
+            // Draw the pause menu
+            Gdx.gl.glClearColor(0f, 0f, 0f, 1f)
+            Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
+            stage.act(delta)
+            stage.draw()
             return
         }
 
@@ -291,6 +311,25 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
         shapeRenderer.rect(barX, barY, barWidth * healthPercentage, barHeight)
     }
 
+    private fun showPauseMenu() {
+        val dialog = object : Dialog("Pausa", skin) {
+            override fun result(obj: Any?) {
+                if (obj == null) return
+                if (obj as Boolean) {
+                    isPaused = false
+                    hide()
+                } else {
+                    game.screen = MainMenuScreen(game)
+                    dispose()
+                }
+            }
+        }
+        dialog.text("Juego en pausa")
+        dialog.button("Reanudar", true)
+        dialog.button("Salir al menú", false)
+        dialog.show(stage)
+    }
+
     override fun resize(width: Int, height: Int) {
         // Actualizar el viewport del stage
         stage.viewport.update(width, height, true)
@@ -310,4 +349,28 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
         stage.dispose()
         enemyTexture.dispose()
     }
+
+    override fun keyDown(keycode: Int): Boolean {
+        if (keycode == Input.Keys.BACK || keycode == Input.Keys.ESCAPE) {
+            // Handle the "Atrás" button
+            if (!isPaused) {
+                isPaused = true
+                showPauseMenu()
+            }
+            return true
+        }
+        return false
+    }
+
+    override fun keyUp(keycode: Int): Boolean = false
+    override fun keyTyped(character: Char): Boolean = false
+    override fun touchDown(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean = false
+    override fun touchUp(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean = false
+    override fun touchDragged(screenX: Int, screenY: Int, pointer: Int): Boolean = false
+    override fun mouseMoved(screenX: Int, screenY: Int): Boolean = false
+    override fun scrolled(amountX: Float, amountY: Float): Boolean = false
+    override fun touchCancelled(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean {
+        return false
+    }
+
 }

@@ -1,6 +1,9 @@
 package es.masmultimedia.screens
 
 import com.badlogic.gdx.Gdx
+import com.badlogic.gdx.Input
+import com.badlogic.gdx.InputMultiplexer
+import com.badlogic.gdx.InputProcessor
 import com.badlogic.gdx.Screen
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.GL20
@@ -8,6 +11,7 @@ import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator
 import com.badlogic.gdx.scenes.scene2d.InputEvent
 import com.badlogic.gdx.scenes.scene2d.Stage
+import com.badlogic.gdx.scenes.scene2d.ui.Dialog
 import com.badlogic.gdx.scenes.scene2d.ui.Label
 import com.badlogic.gdx.scenes.scene2d.ui.Skin
 import com.badlogic.gdx.scenes.scene2d.ui.Table
@@ -16,12 +20,11 @@ import com.badlogic.gdx.scenes.scene2d.utils.ClickListener
 import com.badlogic.gdx.utils.viewport.ScreenViewport
 import es.masmultimedia.game.SimpleSurvivorGame
 
-class MainMenuScreen(private val game: SimpleSurvivorGame) : Screen {
+class MainMenuScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor {
     private val stage = Stage(ScreenViewport())
     private lateinit var backgroundTexture: Texture
 
     override fun show() {
-        Gdx.input.inputProcessor = stage
         val skin = Skin(Gdx.files.internal("uiskin.json"))
 
         // Obtener el ancho y alto de la pantalla
@@ -108,6 +111,10 @@ class MainMenuScreen(private val game: SimpleSurvivorGame) : Screen {
 
         // Añadir la tabla al stage
         stage.addActor(table)
+
+        // Crear el InputMultiplexer
+        val inputMultiplexer = InputMultiplexer(this, stage)
+        Gdx.input.inputProcessor = inputMultiplexer
     }
 
     override fun render(delta: Float) {
@@ -144,4 +151,38 @@ class MainMenuScreen(private val game: SimpleSurvivorGame) : Screen {
         stage.dispose()
         backgroundTexture.dispose()
     }
+
+    override fun keyDown(keycode: Int): Boolean {
+        if (keycode == Input.Keys.BACK || keycode == Input.Keys.ESCAPE) {
+            // Mostrar diálogo de confirmación para salir
+            val dialog = object : Dialog("Salir", Skin(Gdx.files.internal("uiskin.json"))) {
+                override fun result(result: Any?) {
+                    if (result == null) return
+                    if (result as Boolean) {
+                        Gdx.app.exit()
+                    } else {
+                        hide()
+                    }
+                }
+            }
+            dialog.text("¿Deseas salir del juego?")
+            dialog.button("Sí", true)
+            dialog.button("No", false)
+            dialog.show(stage)
+            return true
+        }
+        return false
+    }
+
+    override fun keyUp(keycode: Int): Boolean = false
+    override fun keyTyped(character: Char): Boolean = false
+    override fun touchDown(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean = false
+    override fun touchUp(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean = false
+    override fun touchDragged(screenX: Int, screenY: Int, pointer: Int): Boolean = false
+    override fun mouseMoved(screenX: Int, screenY: Int): Boolean = false
+    override fun scrolled(amountX: Float, amountY: Float): Boolean = false
+    override fun touchCancelled(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean {
+        return false
+    }
+
 }
