@@ -2,16 +2,19 @@ package es.masmultimedia.screens
 
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.Screen
+import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.GL20
 import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator
 import com.badlogic.gdx.scenes.scene2d.InputEvent
 import com.badlogic.gdx.scenes.scene2d.Stage
-import com.badlogic.gdx.scenes.scene2d.ui.*
+import com.badlogic.gdx.scenes.scene2d.ui.Label
+import com.badlogic.gdx.scenes.scene2d.ui.Skin
+import com.badlogic.gdx.scenes.scene2d.ui.Table
+import com.badlogic.gdx.scenes.scene2d.ui.TextButton
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener
 import com.badlogic.gdx.utils.viewport.ScreenViewport
 import es.masmultimedia.game.SimpleSurvivorGame
-import com.badlogic.gdx.graphics.Color
 
 class MainMenuScreen(private val game: SimpleSurvivorGame) : Screen {
     private val stage = Stage(ScreenViewport())
@@ -69,6 +72,13 @@ class MainMenuScreen(private val game: SimpleSurvivorGame) : Screen {
             }
         })
 
+        highScoresButton.addListener(object : ClickListener() {
+            override fun clicked(event: InputEvent?, x: Float, y: Float) {
+                game.screen = HighScoresScreen(game)
+                dispose()
+            }
+        })
+
         exitButton.addListener(object : ClickListener() {
             override fun clicked(event: InputEvent?, x: Float, y: Float) {
                 Gdx.app.exit()
@@ -82,13 +92,17 @@ class MainMenuScreen(private val game: SimpleSurvivorGame) : Screen {
         // Añadir los widgets a la tabla
         table.add(titleLabel).padBottom(screenHeight * 0.05f)
         table.row()
-        table.add(playButton).width(buttonWidth).height(buttonHeight).padBottom(screenHeight * 0.02f).fillX().uniformX()
+        table.add(playButton).width(buttonWidth).height(buttonHeight)
+            .padBottom(screenHeight * 0.02f).fillX().uniformX()
         table.row()
-        table.add(highScoresButton).width(buttonWidth).height(buttonHeight).padBottom(screenHeight * 0.02f).fillX().uniformX()
+        table.add(highScoresButton).width(buttonWidth).height(buttonHeight)
+            .padBottom(screenHeight * 0.02f).fillX().uniformX()
         table.row()
-        table.add(settingsButton).width(buttonWidth).height(buttonHeight).padBottom(screenHeight * 0.02f).fillX().uniformX()
+        table.add(settingsButton).width(buttonWidth).height(buttonHeight)
+            .padBottom(screenHeight * 0.02f).fillX().uniformX()
         table.row()
-        table.add(infoButton).width(buttonWidth).height(buttonHeight).padBottom(screenHeight * 0.02f).fillX().uniformX()
+        table.add(infoButton).width(buttonWidth).height(buttonHeight)
+            .padBottom(screenHeight * 0.02f).fillX().uniformX()
         table.row()
         table.add(exitButton).width(buttonWidth).height(buttonHeight).fillX().uniformX()
 
@@ -102,7 +116,13 @@ class MainMenuScreen(private val game: SimpleSurvivorGame) : Screen {
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
 
         stage.batch.begin()
-        stage.batch.draw(backgroundTexture, 0f, 0f, Gdx.graphics.width.toFloat(), Gdx.graphics.height.toFloat())
+        stage.batch.draw(
+            backgroundTexture,
+            0f,
+            0f,
+            Gdx.graphics.width.toFloat(),
+            Gdx.graphics.height.toFloat()
+        )
         stage.batch.end()
 
         // Dibujar la interfaz
