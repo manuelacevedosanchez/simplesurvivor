@@ -1,23 +1,24 @@
 package es.masmultimedia.entities
 
 import com.badlogic.gdx.Gdx
-import com.badlogic.gdx.graphics.Texture
-import com.badlogic.gdx.graphics.g2d.SpriteBatch
+import com.badlogic.gdx.graphics.Color
+import com.badlogic.gdx.graphics.glutils.ShapeRenderer
 import com.badlogic.gdx.math.Vector2
-import es.masmultimedia.utils.GameAssetManager
 
 open class Projectile(
     open var position: Vector2,
     open val direction: Vector2,
     open val speed: Float,
     open val power: Int,
-    open val texture: Texture = GameAssetManager.getTexture("projecttile_base.png"),
+    open val color: Color = Color.WHITE, // Proyectil por defecto en color blanco
+    open val size: Float = 5f            // Tamaño por defecto
 ) {
     open fun update() {
         position.add(direction.cpy().nor().scl(speed * Gdx.graphics.deltaTime))
     }
 
-    open fun render(batch: SpriteBatch) {
-        batch.draw(texture, position.x, position.y)
+    open fun render(shapeRenderer: ShapeRenderer) {
+        shapeRenderer.color = color
+        shapeRenderer.circle(position.x, position.y, size)
     }
 }

@@ -17,7 +17,12 @@ import com.badlogic.gdx.scenes.scene2d.ui.Dialog
 import com.badlogic.gdx.scenes.scene2d.ui.Skin
 import com.badlogic.gdx.scenes.scene2d.ui.Touchpad
 import com.badlogic.gdx.utils.TimeUtils
-import es.masmultimedia.entities.*
+import es.masmultimedia.entities.Enemy
+import es.masmultimedia.entities.EnemyFactory
+import es.masmultimedia.entities.EnemyType
+import es.masmultimedia.entities.Projectile
+import es.masmultimedia.entities.ProjectileFactory
+import es.masmultimedia.entities.Spaceship
 import es.masmultimedia.game.SimpleSurvivorGame
 import es.masmultimedia.utils.GameAssetManager
 
@@ -149,8 +154,6 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             lastPlayerDirection = rotationDirection
         }
 
-        shapeRenderer.projectionMatrix = camera.combined
-
         // Generar enemigos a intervalos regulares
         if (TimeUtils.timeSinceMillis(lastEnemySpawnTime) > enemySpawnInterval) {
             spawnEnemy()
@@ -227,22 +230,27 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             }
         }
 
-        // Dibujar jugador, enemigos y proyectiles
+        // Dibujar jugador y enemigos con SpriteBatch
         spriteBatch.projectionMatrix = camera.combined
         spriteBatch.begin()
         player.render(spriteBatch)
         for (enemy in enemies) {
             enemy.render(spriteBatch)
         }
-        for (projectile in projectiles) {
-            projectile.render(spriteBatch)
-        }
         spriteBatch.end()
 
-        // Renderizar la barra de vida del jugador con ShapeRenderer
+        // Renderizar la barra de vida del jugador y los proyectiles con ShapeRenderer
         shapeRenderer.projectionMatrix = camera.combined
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
+
+        // Dibujar la barra de vida del jugador
         drawPlayerHealthBar()
+
+        // Dibujar los proyectiles
+        for (projectile in projectiles) {
+            projectile.render(shapeRenderer)
+        }
+
         shapeRenderer.end()
 
         // Dibujar los joysticks
