@@ -61,6 +61,9 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
     private val starsMid = mutableListOf<Star>()
     private val starsNear = mutableListOf<Star>()
 
+    private val sectorWidth = 10000f
+    private val sectorHeight = 10000f
+
     override fun show() {
         camera = OrthographicCamera().apply {
             setToOrtho(false, 800f, 600f)
@@ -104,48 +107,18 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
     }
 
     private fun generateStars() {
-        val margin = 200f
-        generateLayer(
-            starsFar,
-            camera.position.x,
-            camera.position.y,
-            camera.viewportWidth,
-            camera.viewportHeight,
-            margin,
-            200
-        )
-        generateLayer(
-            starsMid,
-            camera.position.x,
-            camera.position.y,
-            camera.viewportWidth,
-            camera.viewportHeight,
-            margin,
-            300
-        )
-        generateLayer(
-            starsNear,
-            camera.position.x,
-            camera.position.y,
-            camera.viewportWidth,
-            camera.viewportHeight,
-            margin,
-            500
-        )
+        generateLayer(starsFar, 200)
+        generateLayer(starsMid, 300)
+        generateLayer(starsNear, 500)
     }
 
     private fun generateLayer(
         layer: MutableList<Star>,
-        camX: Float,
-        camY: Float,
-        width: Float,
-        height: Float,
-        margin: Float,
         count: Int
     ) {
         for (i in 1..count) {
-            val x = camX - width / 2 - margin + Math.random().toFloat() * (width + margin * 2)
-            val y = camY - height / 2 - margin + Math.random().toFloat() * (height + margin * 2)
+            val x = Math.random().toFloat() * sectorWidth
+            val y = Math.random().toFloat() * sectorHeight
             val size = (Math.random().toFloat() * 2f) + 1f
             val alpha = (Math.random().toFloat() * 0.5f) + 0.3f
             val starColor = Color(1f, 1f, 1f, alpha)
@@ -163,11 +136,23 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
     private fun drawLayer(layer: MutableList<Star>, factor: Float) {
         val camX = camera.position.x
         val camY = camera.position.y
+
+        // Dibujar un mosaico 3x3 alrededor de la cámara
+        // Esto significa: la baldosa original y las 8 adyacentes:
+        // dx, dy ∈ {-1, 0, 1}
         for (star in layer) {
-            shapeRenderer.color = star.color
-            val drawX = star.x - (camX * (1 - factor))
-            val drawY = star.y - (camY * (1 - factor))
-            shapeRenderer.circle(drawX, drawY, star.size)
+            for (ix in -1..1) {
+                for (iy in -1..1) {
+                    // Calculamos la posición de la estrella en esta "baldosa" repetida
+                    val tileX = star.x + ix * sectorWidth
+                    val tileY = star.y + iy * sectorHeight
+
+                    shapeRenderer.color = star.color
+                    val drawX = (tileX - camX) * factor + camX
+                    val drawY = (tileY - camY) * factor + camY
+                    shapeRenderer.circle(drawX, drawY, star.size)
+                }
+            }
         }
     }
 
@@ -326,46 +311,31 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
     }
 
     private fun updateLayer(layer: MutableList<Star>, delta: Float, factor: Float) {
-        val camX = camera.position.x
-        val camY = camera.position.y
-        val width = camera.viewportWidth
-        val height = camera.viewportHeight
-        val margin = 200f
-
-        val left = camX - width / 2 - margin
-        val right = camX + width / 2 + margin
-        val bottom = camY - height / 2 - margin
-        val top = camY + height / 2 + margin
+        val twinkleSpeed = 3.0f
 
         for (star in layer) {
             // Parpadeo
-            val twinkleSpeed = 1.0f
             star.color.a += star.twinkleDirection * twinkleSpeed * delta
             if (star.color.a > 1f) {
                 star.color.a = 1f
                 star.twinkleDirection = -1
-            } else if (star.color.a < 0.2f) {
-                star.color.a = 0.2f
+            } else if (star.color.a < 0.05f) {
+                star.color.a = 0.05f
                 star.twinkleDirection = 1
             }
 
-            // Reposicionar si sale de los límites
-            if (star.x < left) {
-                star.x = right
-                star.y = bottom + Math.random().toFloat() * (top - bottom)
-            } else if (star.x > right) {
-                star.x = left
-                star.y = bottom + Math.random().toFloat() * (top - bottom)
-            }
-
-            if (star.y < bottom) {
-                star.y = top
-                star.x = left + Math.random().toFloat() * (right - left)
-            } else if (star.y > top) {
-                star.y = bottom
-                star.x = left + Math.random().toFloat() * (right - left)
-            }
+            // Wrap-around global usando modulo
+            // Función auxiliar para hacer wrap-around
+            star.x = wrap(star.x, sectorWidth)
+            star.y = wrap(star.y, sectorHeight)
         }
+    }
+
+    // Función wrap auxiliar
+    private fun wrap(value: Float, max: Float): Float {
+        var v = value % max
+        if (v < 0) v += max
+        return v
     }
 
     private fun getRandomEnemyType(): EnemyType {
