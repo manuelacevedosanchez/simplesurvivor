@@ -54,6 +54,7 @@ open class Spaceship(
     }
 
     open fun dispose() {
-        texture.dispose()
+        // El GameAssetManager es quien gestiona la textura.
+        // texture.dispose() // <- Eliminar esta línea
     }
 }
