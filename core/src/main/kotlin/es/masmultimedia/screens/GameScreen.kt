@@ -5,9 +5,9 @@ import com.badlogic.gdx.Input
 import com.badlogic.gdx.InputMultiplexer
 import com.badlogic.gdx.InputProcessor
 import com.badlogic.gdx.Screen
+import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.GL20
 import com.badlogic.gdx.graphics.OrthographicCamera
-import com.badlogic.gdx.graphics.g2d.BitmapFont
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer
 import com.badlogic.gdx.math.Rectangle
@@ -23,15 +23,18 @@ import es.masmultimedia.entities.EnemyType
 import es.masmultimedia.entities.Projectile
 import es.masmultimedia.entities.ProjectileFactory
 import es.masmultimedia.entities.Spaceship
+import es.masmultimedia.entities.Star
 import es.masmultimedia.game.SimpleSurvivorGame
 import es.masmultimedia.utils.GameAssetManager
+import kotlin.math.cos
+import kotlin.math.sin
 
 class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor {
     private lateinit var camera: OrthographicCamera
     private lateinit var shapeRenderer: ShapeRenderer
     private lateinit var spriteBatch: SpriteBatch
+
     private lateinit var player: Spaceship
-    lateinit var font: BitmapFont
 
     private var gameStartTime = 0L
     private var gameEnded = false
@@ -53,6 +56,11 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
     private lateinit var movementTouchpad: Touchpad
     private lateinit var rotationTouchpad: Touchpad
 
+    // Capas de estrellas para parallax
+    private val starsFar = mutableListOf<Star>()
+    private val starsMid = mutableListOf<Star>()
+    private val starsNear = mutableListOf<Star>()
+
     override fun show() {
         camera = OrthographicCamera().apply {
             setToOrtho(false, 800f, 600f)
@@ -62,7 +70,6 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         shapeRenderer = ShapeRenderer()
         spriteBatch = SpriteBatch()
 
-        // Inicializar al jugador en el origen
         player = Spaceship(
             position = Vector2(0f, 0f),
             texture = GameAssetManager.getTexture("spaceship_base.png")
@@ -71,7 +78,6 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         gameStartTime = TimeUtils.millis()
         lastEnemySpawnTime = TimeUtils.millis()
 
-        // Configurar los joysticks virtuales
         stage = Stage()
         Gdx.input.inputProcessor = stage
 
@@ -91,14 +97,82 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         stage.addActor(movementTouchpad)
         stage.addActor(rotationTouchpad)
 
-        // Configurar el InputMultiplexer
         val inputMultiplexer = InputMultiplexer(this, stage)
         Gdx.input.inputProcessor = inputMultiplexer
+
+        generateStars()
+    }
+
+    private fun generateStars() {
+        val margin = 200f
+        generateLayer(
+            starsFar,
+            camera.position.x,
+            camera.position.y,
+            camera.viewportWidth,
+            camera.viewportHeight,
+            margin,
+            200
+        )
+        generateLayer(
+            starsMid,
+            camera.position.x,
+            camera.position.y,
+            camera.viewportWidth,
+            camera.viewportHeight,
+            margin,
+            300
+        )
+        generateLayer(
+            starsNear,
+            camera.position.x,
+            camera.position.y,
+            camera.viewportWidth,
+            camera.viewportHeight,
+            margin,
+            500
+        )
+    }
+
+    private fun generateLayer(
+        layer: MutableList<Star>,
+        camX: Float,
+        camY: Float,
+        width: Float,
+        height: Float,
+        margin: Float,
+        count: Int
+    ) {
+        for (i in 1..count) {
+            val x = camX - width / 2 - margin + Math.random().toFloat() * (width + margin * 2)
+            val y = camY - height / 2 - margin + Math.random().toFloat() * (height + margin * 2)
+            val size = (Math.random().toFloat() * 2f) + 1f
+            val alpha = (Math.random().toFloat() * 0.5f) + 0.3f
+            val starColor = Color(1f, 1f, 1f, alpha)
+            val star = Star(x, y, size, starColor)
+            layer.add(star)
+        }
+    }
+
+    private fun drawStarfield() {
+        drawLayer(starsFar, 0.1f)
+        drawLayer(starsMid, 0.5f)
+        drawLayer(starsNear, 1.0f)
+    }
+
+    private fun drawLayer(layer: MutableList<Star>, factor: Float) {
+        val camX = camera.position.x
+        val camY = camera.position.y
+        for (star in layer) {
+            shapeRenderer.color = star.color
+            val drawX = star.x - (camX * (1 - factor))
+            val drawY = star.y - (camY * (1 - factor))
+            shapeRenderer.circle(drawX, drawY, star.size)
+        }
     }
 
     override fun render(delta: Float) {
         if (gameEnded) {
-            // Transicionar a GameOverScreen
             game.screen = GameOverScreen(
                 game,
                 score,
@@ -110,7 +184,6 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         }
 
         if (isPaused) {
-            // Dibujar el menú de pausa
             Gdx.gl.glClearColor(0f, 0f, 0f, 1f)
             Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
             stage.act(delta)
@@ -118,22 +191,18 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             return
         }
 
-        // Limpiar la pantalla con un fondo negro
         Gdx.gl.glClearColor(0f, 0f, 0f, 1f)
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
 
-        // Verificar condición de victoria
-        if (TimeUtils.timeSinceMillis(gameStartTime) > 120000) { // 2 minutos
+        if (TimeUtils.timeSinceMillis(gameStartTime) > 120000) {
             gameEnded = true
             gameWon = true
             return
         }
 
-        // Actualizar la posición de la cámara para seguir al jugador
         camera.position.set(player.position.x, player.position.y, 0f)
         camera.update()
 
-        // Movimiento del jugador basado en el joystick de movimiento
         val moveX = movementTouchpad.knobPercentX
         val moveY = movementTouchpad.knobPercentY
 
@@ -145,7 +214,6 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             }
         }
 
-        // Rotación del jugador basada en el joystick de rotación
         val rotX = rotationTouchpad.knobPercentX
         val rotY = rotationTouchpad.knobPercentY
         if (rotationTouchpad.isTouched && (rotX != 0f || rotY != 0f)) {
@@ -154,7 +222,6 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             lastPlayerDirection = rotationDirection
         }
 
-        // Generar enemigos a intervalos regulares
         if (TimeUtils.timeSinceMillis(lastEnemySpawnTime) > enemySpawnInterval) {
             spawnEnemy()
             lastEnemySpawnTime = TimeUtils.millis()
@@ -169,7 +236,6 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             val enemy = enemyIterator.next()
             enemy.moveTowards(player.position)
 
-            // Verificar colisión con el jugador
             if (enemy.bounds.overlaps(
                     Rectangle(
                         player.position.x - player.width / 2,
@@ -179,7 +245,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
                     )
                 )
             ) {
-                player.takeDamage(20) // Ajusta el valor de daño según sea necesario
+                player.takeDamage(20)
                 enemyIterator.remove()
                 if (!player.isAlive()) {
                     gameEnded = true
@@ -189,7 +255,6 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
                 continue
             }
 
-            // Verificar colisiones con proyectiles
             val projectileIterator = projectiles.iterator()
             while (projectileIterator.hasNext()) {
                 val projectile = projectileIterator.next()
@@ -199,15 +264,14 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
                     if (!enemy.isAlive()) {
                         enemyIterator.remove()
                         enemiesDefeated++
-                        score += 100 // Ajusta el valor de puntuación según sea necesario
+                        score += 100
                         break
                     }
                 }
             }
         }
 
-        // Disparos automáticos
-        if (TimeUtils.nanoTime() - lastShotTime > 500_000_000L) { // Disparar cada 0.5 segundos
+        if (TimeUtils.nanoTime() - lastShotTime > 500_000_000L) {
             if (rotationTouchpad.isTouched) {
                 val projectile = ProjectileFactory.createProjectile(
                     type = player.projectileType,
@@ -219,18 +283,22 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             lastShotTime = TimeUtils.nanoTime()
         }
 
-        // Actualizar proyectiles
         val projectileIterator = projectiles.iterator()
         while (projectileIterator.hasNext()) {
             val projectile = projectileIterator.next()
             projectile.update()
-            // Remover proyectiles si están muy lejos
             if (projectile.position.dst(player.position) > 1000f) {
                 projectileIterator.remove()
             }
         }
 
-        // Dibujar jugador y enemigos con SpriteBatch
+        // Primero actualizar las estrellas y dibujarlas
+        updateStars(delta)
+        shapeRenderer.projectionMatrix = camera.combined
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
+        drawStarfield()
+        shapeRenderer.end()
+
         spriteBatch.projectionMatrix = camera.combined
         spriteBatch.begin()
         player.render(spriteBatch)
@@ -239,66 +307,69 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         }
         spriteBatch.end()
 
-        // Renderizar la barra de vida del jugador y los proyectiles con ShapeRenderer
         shapeRenderer.projectionMatrix = camera.combined
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
-
-        // Dibujar la barra de vida del jugador
         drawPlayerHealthBar()
-
-        // Dibujar los proyectiles
         for (projectile in projectiles) {
             projectile.render(shapeRenderer)
         }
-
         shapeRenderer.end()
 
-        // Dibujar los joysticks
         stage.act(delta)
         stage.draw()
     }
 
-    private fun spawnEnemy() {
-        val minSpawnDistance = 500f
-        val maxSpawnDistance = 1000f
+    private fun updateStars(delta: Float) {
+        updateLayer(starsFar, delta, 0.1f)
+        updateLayer(starsMid, delta, 0.5f)
+        updateLayer(starsNear, delta, 1.0f)
+    }
 
-        val angle = Math.random() * 2 * Math.PI
-        val distance =
-            minSpawnDistance + Math.random().toFloat() * (maxSpawnDistance - minSpawnDistance)
+    private fun updateLayer(layer: MutableList<Star>, delta: Float, factor: Float) {
+        val camX = camera.position.x
+        val camY = camera.position.y
+        val width = camera.viewportWidth
+        val height = camera.viewportHeight
+        val margin = 200f
 
-        val spawnX = player.position.x + distance * Math.cos(angle).toFloat()
-        val spawnY = player.position.y + distance * Math.sin(angle).toFloat()
+        val left = camX - width / 2 - margin
+        val right = camX + width / 2 + margin
+        val bottom = camY - height / 2 - margin
+        val top = camY + height / 2 + margin
 
-        // Elegir un tipo de enemigo aleatorio
-        val enemyType = getRandomEnemyType()
+        for (star in layer) {
+            // Parpadeo
+            val twinkleSpeed = 1.0f
+            star.color.a += star.twinkleDirection * twinkleSpeed * delta
+            if (star.color.a > 1f) {
+                star.color.a = 1f
+                star.twinkleDirection = -1
+            } else if (star.color.a < 0.2f) {
+                star.color.a = 0.2f
+                star.twinkleDirection = 1
+            }
 
-        // Crear nuevo enemigo usando la fábrica
-        val newEnemy = EnemyFactory.createEnemy(enemyType, Vector2(spawnX, spawnY))
+            // Reposicionar si sale de los límites
+            if (star.x < left) {
+                star.x = right
+                star.y = bottom + Math.random().toFloat() * (top - bottom)
+            } else if (star.x > right) {
+                star.x = left
+                star.y = bottom + Math.random().toFloat() * (top - bottom)
+            }
 
-        enemies.add(newEnemy)
+            if (star.y < bottom) {
+                star.y = top
+                star.x = left + Math.random().toFloat() * (right - left)
+            } else if (star.y > top) {
+                star.y = bottom
+                star.x = left + Math.random().toFloat() * (right - left)
+            }
+        }
     }
 
     private fun getRandomEnemyType(): EnemyType {
-        val values = EnemyType.values()
-        return values.random()
-    }
-
-    private fun drawPlayerHealthBar() {
-        val healthPercentage = player.currentHealth.toFloat() / player.maxHealth.toFloat()
-        val healthColor = com.badlogic.gdx.graphics.Color(
-            1 - healthPercentage,
-            healthPercentage,
-            0f,
-            1f
-        )
-        shapeRenderer.color = healthColor
-
-        val barWidth = player.width
-        val barHeight = 5f
-        val barX = player.position.x - barWidth / 2
-        val barY = player.position.y - player.height / 2 - barHeight - 5f
-
-        shapeRenderer.rect(barX, barY, barWidth * healthPercentage, barHeight)
+        return EnemyType.entries.random()
     }
 
     private fun showPauseMenu() {
@@ -320,25 +391,54 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         dialog.show(stage)
     }
 
+    private fun drawPlayerHealthBar() {
+        val healthPercentage = player.currentHealth.toFloat() / player.maxHealth.toFloat()
+        val healthColor = Color(
+            1 - healthPercentage,
+            healthPercentage,
+            0f,
+            1f
+        )
+        shapeRenderer.color = healthColor
+
+        val barWidth = player.width
+        val barHeight = 5f
+        val barX = player.position.x - barWidth / 2
+        val barY = player.position.y - player.height / 2 - barHeight - 5f
+
+        shapeRenderer.rect(barX, barY, barWidth * healthPercentage, barHeight)
+    }
+
+    private fun spawnEnemy() {
+        val minSpawnDistance = 500f
+        val maxSpawnDistance = 1000f
+
+        val angle = Math.random() * 2 * Math.PI
+        val distance =
+            minSpawnDistance + Math.random().toFloat() * (maxSpawnDistance - minSpawnDistance)
+
+        val spawnX = player.position.x + distance * cos(angle).toFloat()
+        val spawnY = player.position.y + distance * sin(angle).toFloat()
+
+        val enemyType = getRandomEnemyType()
+        val newEnemy = EnemyFactory.createEnemy(enemyType, Vector2(spawnX, spawnY))
+        enemies.add(newEnemy)
+    }
+
     override fun resize(width: Int, height: Int) {
         stage.viewport.update(width, height, true)
     }
 
     override fun pause() {}
-
     override fun resume() {}
-
     override fun hide() {}
-
     override fun dispose() {
         player.dispose()
         spriteBatch.dispose()
         shapeRenderer.dispose()
         stage.dispose()
-        // No es necesario disponer las texturas aquí, ya que las gestiona GameAssetManager
     }
 
-    // Implementación de InputProcessor
     override fun keyDown(keycode: Int): Boolean {
         if (keycode == Input.Keys.BACK || keycode == Input.Keys.ESCAPE) {
             if (!isPaused) {
