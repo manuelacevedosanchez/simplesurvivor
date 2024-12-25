@@ -84,17 +84,36 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         stage = Stage()
         Gdx.input.inputProcessor = stage
 
+        val screenWidth = Gdx.graphics.width.toFloat()
+        val screenHeight = Gdx.graphics.height.toFloat()
+
+        // Define un porcentaje para el margen
+        val marginPercentage = 0.10f // 5% del tamaño de la pantalla
+        val marginX = screenWidth * marginPercentage
+        val marginY = screenHeight * marginPercentage
+
         val touchpadStyle = Touchpad.TouchpadStyle().apply {
             background = skin.getDrawable("default-round")
             knob = skin.getDrawable("default-round")
         }
 
+        val touchpadSize = screenWidth * 0.10f // 25% del ancho, por ejemplo
+
+        // Ejemplo: Touchpad de movimiento, en la esquina inferior izquierda
+        // Lo situamos con un margenX de la izquierda y un marginY de la parte inferior
         movementTouchpad = Touchpad(10f, touchpadStyle).apply {
-            setBounds(15f, 15f, 200f, 200f)
+            setBounds(marginX, marginY, touchpadSize, touchpadSize)
         }
 
+        // Ejemplo: Touchpad de rotación, en la esquina inferior derecha
+        // Restamos 200f (ancho del touchpad) más el margen
         rotationTouchpad = Touchpad(10f, touchpadStyle).apply {
-            setBounds(Gdx.graphics.width - 215f, 15f, 200f, 200f)
+            setBounds(
+                screenWidth - 200f - marginX,
+                marginY,
+                touchpadSize,
+                touchpadSize
+            )
         }
 
         stage.addActor(movementTouchpad)
