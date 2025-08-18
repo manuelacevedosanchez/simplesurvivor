@@ -1,11 +1,13 @@
 package es.masmultimedia.entities
 
+import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.math.Vector2
 
 enum class ProjectileType {
     BASIC,
     FAST,
-    POWERFUL
+    POWERFUL,
+    CHARGED,
 }
 
 object ProjectileFactory {
@@ -14,6 +16,14 @@ object ProjectileFactory {
             ProjectileType.BASIC -> BasicProjectile(position, direction)
             ProjectileType.FAST -> FastProjectile(position, direction)
             ProjectileType.POWERFUL -> PowerfulProjectile(position, direction)
+            ProjectileType.CHARGED -> Projectile(
+                position = position,
+                direction = direction,
+                speed = 400f,    // más lento que el normal
+                power = 50,      // mucho más daño
+                color = Color.YELLOW,
+                size = 8f      // bola más grande
+            )
         }
     }
 }

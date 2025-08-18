@@ -7,5 +7,6 @@ class StrongEnemy(position: Vector2, texture: Texture) : Enemy(
     position = position,
     health = 200,
     speed = 80f,
+    EnemyType.STRONG,
     texture = texture
 )

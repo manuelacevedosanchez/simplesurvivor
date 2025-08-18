@@ -27,6 +27,7 @@ import es.masmultimedia.entities.Spaceship
 import es.masmultimedia.entities.Star
 import es.masmultimedia.game.SimpleSurvivorGame
 import es.masmultimedia.utils.GameAssetManager
+import ktx.math.random
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -51,10 +52,6 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
     private val powerUps = mutableListOf<PowerUp>()
     private var lastPowerUpSpawnTime = 0L
     private var powerUpSpawnInterval = 10000L // cada 10 segundos
-
-    private var tripleShotActive = false
-    private var tripleShotEndTime = 0L
-    private val tripleShotDuration = 5000L // 5 segundos
 
     private var lastShotTime = 0L
     private var lastEnemySpawnTime = 0L
@@ -185,22 +182,31 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
     }
 
     private fun spawnPowerUp() {
-        // Generar posición aleatoria
-        val angle = Math.random() * 2 * Math.PI
-        val distance = 500 + Math.random().toFloat() * 500 // entre 500 y 1000 de distancia
-        val spawnX = player.position.x + distance * Math.cos(angle).toFloat()
-        val spawnY = player.position.y + distance * Math.sin(angle).toFloat()
+        val halfWidth = camera.viewportWidth / 2
+        val halfHeight = camera.viewportHeight / 2
 
-        // Crear un powerup
-        val newPowerUp = PowerUp(
-            position = Vector2(spawnX, spawnY),
-            radius = 10f,
-            color = Color.RED
-        )
-        powerUps.add(newPowerUp)
+        val minX = player.position.x - halfWidth
+        val maxX = player.position.x + halfWidth
+        val minY = player.position.y - halfHeight
+        val maxY = player.position.y + halfHeight
+
+        val spawnX = (minX..maxX).random()
+        val spawnY = (minY..maxY).random()
+
+        val type = PowerUp.Type.entries.random()
+        val color = when (type) {
+            PowerUp.Type.HEALTH -> Color.GREEN
+            PowerUp.Type.TRIPLE_SHOT -> Color.RED
+            PowerUp.Type.SHIELD -> Color.CYAN
+            PowerUp.Type.CHARGED_SHOT -> Color.YELLOW
+        }
+
+        powerUps.add(PowerUp(Vector2(spawnX, spawnY), radius = 10f, color = color, type = type))
     }
 
     override fun render(delta: Float) {
+        player.update(delta)
+
         if (gameEnded) {
             game.screen = GameOverScreen(
                 game,
@@ -294,6 +300,41 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
                         enemyIterator.remove()
                         enemiesDefeated++
                         score += 100
+
+                        // Probabilidad según tipo de enemigo
+                        val dropChance = when (enemy.type) {
+                            EnemyType.NORMAL -> 0.9
+                            EnemyType.FAST -> 0.9
+                            EnemyType.STRONG -> 0.9
+                            else -> 0.0
+                        }
+
+                        if (Math.random() < dropChance) {
+
+                            val type = when (enemy.type) {
+                                EnemyType.NORMAL -> PowerUp.Type.CHARGED_SHOT
+                                EnemyType.FAST -> PowerUp.Type.TRIPLE_SHOT
+                                EnemyType.STRONG -> PowerUp.Type.SHIELD
+                                else -> PowerUp.Type.HEALTH // por defecto
+                            }
+
+                            val color = when (type) {
+                                PowerUp.Type.HEALTH -> Color.GREEN
+                                PowerUp.Type.TRIPLE_SHOT -> Color.RED
+                                PowerUp.Type.SHIELD -> Color.CYAN
+                                PowerUp.Type.CHARGED_SHOT -> Color.YELLOW
+                            }
+
+                            powerUps.add(
+                                PowerUp(
+                                    enemy.position.cpy(),
+                                    radius = 10f,
+                                    color = color,
+                                    type = type
+                                )
+                            )
+                        }
+
                         break
                     }
                 }
@@ -302,7 +343,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
 
         if (TimeUtils.nanoTime() - lastShotTime > 500_000_000L) { // Disparo cada 0.5 seg
             if (rotationTouchpad.isTouched) {
-                if (!tripleShotActive) {
+                if (!player.isTripleShotActive()) {
                     // Disparo normal
                     val projectile = ProjectileFactory.createProjectile(
                         type = player.projectileType,
@@ -369,8 +410,11 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             if (pu.overlapsWith(player)) {
                 // El jugador lo recogió
                 powerUpIterator.remove()
-                grantTripleShot()
+                player.applyPowerUp(pu)
+            } else if (pu.isExpired()) {
+                powerUpIterator.remove() // desaparece tras 10s
             }
+
         }
 
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
@@ -380,10 +424,6 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         }
 // ...
         shapeRenderer.end()
-
-        if (tripleShotActive && TimeUtils.millis() > tripleShotEndTime) {
-            tripleShotActive = false
-        }
 
         // Primero actualizar las estrellas y dibujarlas
         updateStars(delta)
@@ -400,6 +440,15 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         }
         spriteBatch.end()
 
+        // Dibujar el círculo del escudo si está activo
+        if (player.isShieldActive()) {
+            shapeRenderer.projectionMatrix = camera.combined
+            shapeRenderer.begin(ShapeRenderer.ShapeType.Line)
+            shapeRenderer.color = Color.CYAN
+            shapeRenderer.circle(player.position.x, player.position.y, player.width)
+            shapeRenderer.end()
+        }
+
         shapeRenderer.projectionMatrix = camera.combined
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
         drawPlayerHealthBar()
@@ -410,11 +459,6 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
 
         stage.act(delta)
         stage.draw()
-    }
-
-    fun grantTripleShot() {
-        tripleShotActive = true
-        tripleShotEndTime = TimeUtils.millis() + tripleShotDuration
     }
 
     private fun updateStars(delta: Float) {
