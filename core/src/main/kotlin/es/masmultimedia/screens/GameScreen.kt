@@ -20,6 +20,7 @@ import com.badlogic.gdx.utils.TimeUtils
 import es.masmultimedia.entities.Enemy
 import es.masmultimedia.entities.EnemyFactory
 import es.masmultimedia.entities.EnemyType
+import es.masmultimedia.entities.PowerUp
 import es.masmultimedia.entities.Projectile
 import es.masmultimedia.entities.ProjectileFactory
 import es.masmultimedia.entities.Spaceship
@@ -46,6 +47,14 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
     private val enemies = mutableListOf<Enemy>()
     private val projectiles = mutableListOf<Projectile>()
     private val skin = Skin(Gdx.files.internal("uiskin.json"))
+
+    private val powerUps = mutableListOf<PowerUp>()
+    private var lastPowerUpSpawnTime = 0L
+    private var powerUpSpawnInterval = 10000L // cada 10 segundos
+
+    private var tripleShotActive = false
+    private var tripleShotEndTime = 0L
+    private val tripleShotDuration = 5000L // 5 segundos
 
     private var lastShotTime = 0L
     private var lastEnemySpawnTime = 0L
@@ -175,6 +184,22 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         }
     }
 
+    private fun spawnPowerUp() {
+        // Generar posición aleatoria
+        val angle = Math.random() * 2 * Math.PI
+        val distance = 500 + Math.random().toFloat() * 500 // entre 500 y 1000 de distancia
+        val spawnX = player.position.x + distance * Math.cos(angle).toFloat()
+        val spawnY = player.position.y + distance * Math.sin(angle).toFloat()
+
+        // Crear un powerup
+        val newPowerUp = PowerUp(
+            position = Vector2(spawnX, spawnY),
+            radius = 10f,
+            color = Color.RED
+        )
+        powerUps.add(newPowerUp)
+    }
+
     override fun render(delta: Float) {
         if (gameEnded) {
             game.screen = GameOverScreen(
@@ -275,14 +300,44 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             }
         }
 
-        if (TimeUtils.nanoTime() - lastShotTime > 500_000_000L) {
+        if (TimeUtils.nanoTime() - lastShotTime > 500_000_000L) { // Disparo cada 0.5 seg
             if (rotationTouchpad.isTouched) {
-                val projectile = ProjectileFactory.createProjectile(
-                    type = player.projectileType,
-                    position = player.position.cpy(),
-                    direction = lastPlayerDirection.cpy()
-                )
-                projectiles.add(projectile)
+                if (!tripleShotActive) {
+                    // Disparo normal
+                    val projectile = ProjectileFactory.createProjectile(
+                        type = player.projectileType,
+                        position = player.position.cpy(),
+                        direction = lastPlayerDirection.cpy()
+                    )
+                    projectiles.add(projectile)
+                } else {
+                    // Disparo triple
+                    // 1) Disparo central
+                    val pCenter = ProjectileFactory.createProjectile(
+                        type = player.projectileType,
+                        position = player.position.cpy(),
+                        direction = lastPlayerDirection.cpy()
+                    )
+
+                    // 2) Disparo izquierdo (rotamos -10 grados por ejemplo)
+                    val dirLeft = lastPlayerDirection.cpy().rotateDeg(-10f)
+                    val pLeft = ProjectileFactory.createProjectile(
+                        type = player.projectileType,
+                        position = player.position.cpy(),
+                        direction = dirLeft
+                    )
+
+                    // 3) Disparo derecho (rotamos +10 grados)
+                    val dirRight = lastPlayerDirection.cpy().rotateDeg(10f)
+                    val pRight = ProjectileFactory.createProjectile(
+                        type = player.projectileType,
+                        position = player.position.cpy(),
+                        direction = dirRight
+                    )
+
+                    // Añadir los tres disparos
+                    projectiles.addAll(listOf(pCenter, pLeft, pRight))
+                }
             }
             lastShotTime = TimeUtils.nanoTime()
         }
@@ -294,6 +349,40 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             if (projectile.position.dst(player.position) > 1000f) {
                 projectileIterator.remove()
             }
+        }
+
+        if (TimeUtils.timeSinceMillis(lastPowerUpSpawnTime) > powerUpSpawnInterval) {
+            val chance = Math.random()
+            if (chance < 0.10) { // 10% de probabilidad
+                spawnPowerUp()
+            }
+            lastPowerUpSpawnTime = TimeUtils.millis()
+        }
+
+        for (powerUp in powerUps) {
+            powerUp.update(delta)
+        }
+
+        val powerUpIterator = powerUps.iterator()
+        while (powerUpIterator.hasNext()) {
+            val pu = powerUpIterator.next()
+            if (pu.overlapsWith(player)) {
+                // El jugador lo recogió
+                powerUpIterator.remove()
+                grantTripleShot()
+            }
+        }
+
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
+// ... starfield ...
+        for (pu in powerUps) {
+            pu.render(shapeRenderer)
+        }
+// ...
+        shapeRenderer.end()
+
+        if (tripleShotActive && TimeUtils.millis() > tripleShotEndTime) {
+            tripleShotActive = false
         }
 
         // Primero actualizar las estrellas y dibujarlas
@@ -321,6 +410,11 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
 
         stage.act(delta)
         stage.draw()
+    }
+
+    fun grantTripleShot() {
+        tripleShotActive = true
+        tripleShotEndTime = TimeUtils.millis() + tripleShotDuration
     }
 
     private fun updateStars(delta: Float) {
