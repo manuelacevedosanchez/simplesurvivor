@@ -3,6 +3,7 @@ package es.masmultimedia.entities
 import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.math.Vector2
+import com.badlogic.gdx.utils.TimeUtils
 import es.masmultimedia.utils.GameAssetManager
 
 open class Spaceship(
@@ -14,8 +15,20 @@ open class Spaceship(
     open val maxHealth: Int = 100,
     open var currentHealth: Int = 100,
     open val speed: Float = 200f,
-    open val projectileType: ProjectileType = ProjectileType.BASIC
+    open var projectileType: ProjectileType = ProjectileType.BASIC
 ) {
+    private var tripleShotActive = false
+    private var tripleShotEndTime = 0L
+    private val tripleShotDuration = 5000L
+
+    private var shieldActive = false
+    private var shieldEndTime = 0L
+    private val shieldDuration = 5000L // 5 segundos de escudo
+
+    private var chargedShotActive = false
+    private var chargedShotEndTime = 0L
+    private val chargedShotDuration = 7000L // 7 segundos
+
     open fun updateRotation(targetPosition: Vector2) {
         rotation =
             Vector2(targetPosition.x - position.x, targetPosition.y - position.y).angleDeg() - 90
@@ -26,6 +39,7 @@ open class Spaceship(
     }
 
     open fun takeDamage(damage: Int) {
+        if (shieldActive) return // No recibe daño
         currentHealth -= damage
         if (currentHealth < 0) currentHealth = 0
     }
@@ -57,4 +71,43 @@ open class Spaceship(
         // El GameAssetManager es quien gestiona la textura.
         // texture.dispose() // <- Eliminar esta línea
     }
+
+    fun applyPowerUp(powerUp: PowerUp) {
+        when (powerUp.type) {
+            PowerUp.Type.HEALTH -> currentHealth = (currentHealth + 30).coerceAtMost(maxHealth)
+            PowerUp.Type.TRIPLE_SHOT -> {
+                tripleShotActive = true
+                tripleShotEndTime = TimeUtils.millis() + tripleShotDuration
+            }
+
+            PowerUp.Type.SHIELD -> {
+                shieldActive = true
+                shieldEndTime = TimeUtils.millis() + shieldDuration
+            }
+
+            PowerUp.Type.CHARGED_SHOT -> {
+                projectileType = ProjectileType.CHARGED
+                chargedShotActive = true
+                chargedShotEndTime = TimeUtils.millis() + chargedShotDuration
+            }
+        }
+    }
+
+    fun update(delta: Float) {
+        if (tripleShotActive && TimeUtils.millis() > tripleShotEndTime) {
+            tripleShotActive = false
+        }
+        if (shieldActive && TimeUtils.millis() > shieldEndTime) {
+            shieldActive = false
+        }
+        if (chargedShotActive && TimeUtils.millis() > chargedShotEndTime) {
+            chargedShotActive = false
+            projectileType = ProjectileType.BASIC
+        }
+    }
+
+    fun isTripleShotActive(): Boolean = tripleShotActive
+
+    fun isShieldActive(): Boolean = shieldActive
+
 }

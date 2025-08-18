@@ -7,5 +7,6 @@ class FastEnemy(position: Vector2, texture: Texture) : Enemy(
     position = position,
     health = 50,
     speed = 150f,
+    EnemyType.FAST,
     texture = texture
 )

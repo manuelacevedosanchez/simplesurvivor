@@ -31,6 +31,7 @@ object EnemyFactory {
                 position = position,
                 health = 100,
                 speed = 100f,
+                type = EnemyType.NORMAL,
                 texture = texture
             )
             EnemyType.FAST -> FastEnemy(position, texture)

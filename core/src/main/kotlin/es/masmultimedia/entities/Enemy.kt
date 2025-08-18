@@ -11,6 +11,7 @@ open class Enemy(
     open val position: Vector2,
     open var health: Int,
     open val speed: Float,
+    open val type: EnemyType,
     open val texture: Texture = GameAssetManager.getTexture("enemy_base.png"),
 ) {
     open val bounds: Rectangle
