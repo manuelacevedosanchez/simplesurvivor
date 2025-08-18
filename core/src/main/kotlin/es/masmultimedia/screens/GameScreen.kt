@@ -1,37 +1,61 @@
 package es.masmultimedia.screens
 
 import com.badlogic.gdx.Gdx
+import com.badlogic.gdx.Input
+import com.badlogic.gdx.InputMultiplexer
+import com.badlogic.gdx.InputProcessor
 import com.badlogic.gdx.Screen
+import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.GL20
 import com.badlogic.gdx.graphics.OrthographicCamera
-import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer
 import com.badlogic.gdx.math.Rectangle
 import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.scenes.scene2d.Stage
+import com.badlogic.gdx.scenes.scene2d.ui.Dialog
 import com.badlogic.gdx.scenes.scene2d.ui.Skin
 import com.badlogic.gdx.scenes.scene2d.ui.Touchpad
 import com.badlogic.gdx.utils.TimeUtils
 import es.masmultimedia.entities.Enemy
+import es.masmultimedia.entities.EnemyFactory
+import es.masmultimedia.entities.EnemyType
+import es.masmultimedia.entities.PowerUp
 import es.masmultimedia.entities.Projectile
+import es.masmultimedia.entities.ProjectileFactory
 import es.masmultimedia.entities.Spaceship
+import es.masmultimedia.entities.Star
 import es.masmultimedia.game.SimpleSurvivorGame
+import es.masmultimedia.utils.GameAssetManager
+import kotlin.math.cos
+import kotlin.math.sin
 
-class GameScreen(private val game: SimpleSurvivorGame) : Screen {
+class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor {
     private lateinit var camera: OrthographicCamera
     private lateinit var shapeRenderer: ShapeRenderer
     private lateinit var spriteBatch: SpriteBatch
-    private lateinit var player: Spaceship
-    private lateinit var enemyTexture: Texture
 
-    private var playerSpeed = 200f
+    private lateinit var player: Spaceship
+
     private var gameStartTime = 0L
     private var gameEnded = false
     private var gameWon = false
+    private var enemiesDefeated = 0
+    private var score = 0
+    private var isPaused = false
 
     private val enemies = mutableListOf<Enemy>()
     private val projectiles = mutableListOf<Projectile>()
+    private val skin = Skin(Gdx.files.internal("uiskin.json"))
+
+    private val powerUps = mutableListOf<PowerUp>()
+    private var lastPowerUpSpawnTime = 0L
+    private var powerUpSpawnInterval = 10000L // cada 10 segundos
+
+    private var tripleShotActive = false
+    private var tripleShotEndTime = 0L
+    private val tripleShotDuration = 5000L // 5 segundos
+
     private var lastShotTime = 0L
     private var lastEnemySpawnTime = 0L
     private var enemySpawnInterval = 5000L // Intervalo inicial de 5 segundos
@@ -40,6 +64,14 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
     private lateinit var stage: Stage
     private lateinit var movementTouchpad: Touchpad
     private lateinit var rotationTouchpad: Touchpad
+
+    // Capas de estrellas para parallax
+    private val starsFar = mutableListOf<Star>()
+    private val starsMid = mutableListOf<Star>()
+    private val starsNear = mutableListOf<Star>()
+
+    private val sectorWidth = 10000f
+    private val sectorHeight = 10000f
 
     override fun show() {
         camera = OrthographicCamera().apply {
@@ -50,84 +82,167 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
         shapeRenderer = ShapeRenderer()
         spriteBatch = SpriteBatch()
 
-        // Inicializar al jugador en el origen
-        player = Spaceship(Vector2(0f, 0f))
-        enemyTexture = Texture("enemy_01.png")
+        player = Spaceship(
+            position = Vector2(0f, 0f),
+            texture = GameAssetManager.getTexture("spaceship_base.png")
+        )
 
         gameStartTime = TimeUtils.millis()
         lastEnemySpawnTime = TimeUtils.millis()
 
-        // Configurar los joysticks virtuales
         stage = Stage()
         Gdx.input.inputProcessor = stage
 
-        val skin = Skin(Gdx.files.internal("uiskin.json"))
+        val screenWidth = Gdx.graphics.width.toFloat()
+        val screenHeight = Gdx.graphics.height.toFloat()
+
+        // Define un porcentaje para el margen
+        val marginPercentage = 0.10f // 5% del tamaño de la pantalla
+        val marginX = screenWidth * marginPercentage
+        val marginY = screenHeight * marginPercentage
 
         val touchpadStyle = Touchpad.TouchpadStyle().apply {
             background = skin.getDrawable("default-round")
             knob = skin.getDrawable("default-round")
         }
 
+        val touchpadSize = screenWidth * 0.10f // 25% del ancho, por ejemplo
+
+        // Ejemplo: Touchpad de movimiento, en la esquina inferior izquierda
+        // Lo situamos con un margenX de la izquierda y un marginY de la parte inferior
         movementTouchpad = Touchpad(10f, touchpadStyle).apply {
-            setBounds(15f, 15f, 200f, 200f)
+            setBounds(marginX, marginY, touchpadSize, touchpadSize)
         }
 
+        // Ejemplo: Touchpad de rotación, en la esquina inferior derecha
+        // Restamos 200f (ancho del touchpad) más el margen
         rotationTouchpad = Touchpad(10f, touchpadStyle).apply {
-            setBounds(Gdx.graphics.width - 215f, 15f, 200f, 200f)
+            setBounds(
+                screenWidth - 200f - marginX,
+                marginY,
+                touchpadSize,
+                touchpadSize
+            )
         }
 
         stage.addActor(movementTouchpad)
         stage.addActor(rotationTouchpad)
+
+        val inputMultiplexer = InputMultiplexer(this, stage)
+        Gdx.input.inputProcessor = inputMultiplexer
+
+        generateStars()
+    }
+
+    private fun generateStars() {
+        generateLayer(starsFar, 200)
+        generateLayer(starsMid, 300)
+        generateLayer(starsNear, 500)
+    }
+
+    private fun generateLayer(
+        layer: MutableList<Star>,
+        count: Int
+    ) {
+        for (i in 1..count) {
+            val x = Math.random().toFloat() * sectorWidth
+            val y = Math.random().toFloat() * sectorHeight
+            val size = (Math.random().toFloat() * 2f) + 1f
+            val alpha = (Math.random().toFloat() * 0.5f) + 0.3f
+            val starColor = Color(1f, 1f, 1f, alpha)
+            val star = Star(x, y, size, starColor)
+            layer.add(star)
+        }
+    }
+
+    private fun drawStarfield() {
+        drawLayer(starsFar, 0.1f)
+        drawLayer(starsMid, 0.5f)
+        drawLayer(starsNear, 1.0f)
+    }
+
+    private fun drawLayer(layer: MutableList<Star>, factor: Float) {
+        val camX = camera.position.x
+        val camY = camera.position.y
+
+        // Dibujar un mosaico 3x3 alrededor de la cámara
+        // Esto significa: la baldosa original y las 8 adyacentes:
+        // dx, dy ∈ {-1, 0, 1}
+        for (star in layer) {
+            for (ix in -1..1) {
+                for (iy in -1..1) {
+                    // Calculamos la posición de la estrella en esta "baldosa" repetida
+                    val tileX = star.x + ix * sectorWidth
+                    val tileY = star.y + iy * sectorHeight
+
+                    shapeRenderer.color = star.color
+                    val drawX = (tileX - camX) * factor + camX
+                    val drawY = (tileY - camY) * factor + camY
+                    shapeRenderer.circle(drawX, drawY, star.size)
+                }
+            }
+        }
+    }
+
+    private fun spawnPowerUp() {
+        // Generar posición aleatoria
+        val angle = Math.random() * 2 * Math.PI
+        val distance = 500 + Math.random().toFloat() * 500 // entre 500 y 1000 de distancia
+        val spawnX = player.position.x + distance * Math.cos(angle).toFloat()
+        val spawnY = player.position.y + distance * Math.sin(angle).toFloat()
+
+        // Crear un powerup
+        val newPowerUp = PowerUp(
+            position = Vector2(spawnX, spawnY),
+            radius = 10f,
+            color = Color.RED
+        )
+        powerUps.add(newPowerUp)
     }
 
     override fun render(delta: Float) {
         if (gameEnded) {
-            // Mostrar mensaje de fin del juego
-            Gdx.gl.glClearColor(0f, 0f, 0f, 1f)
-            Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
-            shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
-            shapeRenderer.color =
-                if (gameWon) com.badlogic.gdx.graphics.Color.GREEN else com.badlogic.gdx.graphics.Color.RED
-            shapeRenderer.circle(400f, 300f, 100f)
-            shapeRenderer.end()
+            game.screen = GameOverScreen(
+                game,
+                score,
+                enemiesDefeated,
+                TimeUtils.timeSinceMillis(gameStartTime)
+            )
+            dispose()
             return
         }
 
-        // Limpiar la pantalla con un fondo negro (espacio)
+        if (isPaused) {
+            Gdx.gl.glClearColor(0f, 0f, 0f, 1f)
+            Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
+            stage.act(delta)
+            stage.draw()
+            return
+        }
+
         Gdx.gl.glClearColor(0f, 0f, 0f, 1f)
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
 
-        // Verificar condición de victoria
-        if (TimeUtils.timeSinceMillis(gameStartTime) > 120000) { // 2 minutos
+        if (TimeUtils.timeSinceMillis(gameStartTime) > 120000) {
             gameEnded = true
             gameWon = true
             return
         }
 
-        // Actualizar la posición de la cámara para seguir al jugador
         camera.position.set(player.position.x, player.position.y, 0f)
         camera.update()
 
-        // Movimiento del jugador basado en el joystick de movimiento
         val moveX = movementTouchpad.knobPercentX
         val moveY = movementTouchpad.knobPercentY
 
         if (movementTouchpad.isTouched) {
-            // Cálculo de la dirección del jugador
             val playerDirection = Vector2(moveX, moveY)
             if (playerDirection.len() > 0) {
-                playerDirection.nor() // Normaliza la dirección
-
-                // Calcula la nueva posición del jugador
-                val newPosition =
-                    player.position.cpy().add(playerDirection.scl(playerSpeed * delta))
-
-                // Actualizar la posición del jugador sin restricciones
-                player.position.set(newPosition)
+                playerDirection.nor()
+                player.updatePosition(playerDirection, Gdx.graphics.deltaTime)
             }
         }
 
-        // Rotación del jugador basada en el joystick de rotación
         val rotX = rotationTouchpad.knobPercentX
         val rotY = rotationTouchpad.knobPercentY
         if (rotationTouchpad.isTouched && (rotX != 0f || rotY != 0f)) {
@@ -136,15 +251,11 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
             lastPlayerDirection = rotationDirection
         }
 
-        shapeRenderer.projectionMatrix = camera.combined
-
-        // Generar enemigos a intervalos regulares
         if (TimeUtils.timeSinceMillis(lastEnemySpawnTime) > enemySpawnInterval) {
             spawnEnemy()
             lastEnemySpawnTime = TimeUtils.millis()
-            // Aumentar la dificultad reduciendo el intervalo
-            if (enemySpawnInterval > 1000L) { // No bajar de 1 segundo
-                enemySpawnInterval -= 100L // Reducir 100 ms cada vez
+            if (enemySpawnInterval > 1000L) {
+                enemySpawnInterval -= 100L
             }
         }
 
@@ -154,14 +265,25 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
             val enemy = enemyIterator.next()
             enemy.moveTowards(player.position)
 
-            // Verificar colisión con el jugador
-            if (enemy.bounds.overlaps(Rectangle(player.position.x - player.width / 2, player.position.y - player.height / 2, player.width, player.height))) {
-                gameEnded = true
-                gameWon = false
-                return
+            if (enemy.bounds.overlaps(
+                    Rectangle(
+                        player.position.x - player.width / 2,
+                        player.position.y - player.height / 2,
+                        player.width,
+                        player.height
+                    )
+                )
+            ) {
+                player.takeDamage(20)
+                enemyIterator.remove()
+                if (!player.isAlive()) {
+                    gameEnded = true
+                    gameWon = false
+                    return
+                }
+                continue
             }
 
-            // Verificar colisiones con proyectiles
             val projectileIterator = projectiles.iterator()
             while (projectileIterator.hasNext()) {
                 val projectile = projectileIterator.next()
@@ -170,98 +292,255 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen {
                     projectileIterator.remove()
                     if (!enemy.isAlive()) {
                         enemyIterator.remove()
+                        enemiesDefeated++
+                        score += 100
                         break
                     }
                 }
             }
         }
 
-        // Disparos automáticos
-        if (TimeUtils.nanoTime() - lastShotTime > 500_000_000L) { // Disparar cada 0.5 segundos
+        if (TimeUtils.nanoTime() - lastShotTime > 500_000_000L) { // Disparo cada 0.5 seg
             if (rotationTouchpad.isTouched) {
-                projectiles.add(
-                    Projectile(
-                        player.position.cpy(),
-                        lastPlayerDirection.cpy()
+                if (!tripleShotActive) {
+                    // Disparo normal
+                    val projectile = ProjectileFactory.createProjectile(
+                        type = player.projectileType,
+                        position = player.position.cpy(),
+                        direction = lastPlayerDirection.cpy()
                     )
-                ) // Disparar en la dirección de la rotación del jugador
+                    projectiles.add(projectile)
+                } else {
+                    // Disparo triple
+                    // 1) Disparo central
+                    val pCenter = ProjectileFactory.createProjectile(
+                        type = player.projectileType,
+                        position = player.position.cpy(),
+                        direction = lastPlayerDirection.cpy()
+                    )
+
+                    // 2) Disparo izquierdo (rotamos -10 grados por ejemplo)
+                    val dirLeft = lastPlayerDirection.cpy().rotateDeg(-10f)
+                    val pLeft = ProjectileFactory.createProjectile(
+                        type = player.projectileType,
+                        position = player.position.cpy(),
+                        direction = dirLeft
+                    )
+
+                    // 3) Disparo derecho (rotamos +10 grados)
+                    val dirRight = lastPlayerDirection.cpy().rotateDeg(10f)
+                    val pRight = ProjectileFactory.createProjectile(
+                        type = player.projectileType,
+                        position = player.position.cpy(),
+                        direction = dirRight
+                    )
+
+                    // Añadir los tres disparos
+                    projectiles.addAll(listOf(pCenter, pLeft, pRight))
+                }
             }
             lastShotTime = TimeUtils.nanoTime()
         }
 
-        // Actualizar proyectiles
         val projectileIterator = projectiles.iterator()
         while (projectileIterator.hasNext()) {
             val projectile = projectileIterator.next()
             projectile.update()
-            // Remover proyectiles si están muy lejos (opcional)
             if (projectile.position.dst(player.position) > 1000f) {
                 projectileIterator.remove()
             }
         }
 
-        // Dibujar jugador, enemigos y proyectiles
+        if (TimeUtils.timeSinceMillis(lastPowerUpSpawnTime) > powerUpSpawnInterval) {
+            val chance = Math.random()
+            if (chance < 0.10) { // 10% de probabilidad
+                spawnPowerUp()
+            }
+            lastPowerUpSpawnTime = TimeUtils.millis()
+        }
+
+        for (powerUp in powerUps) {
+            powerUp.update(delta)
+        }
+
+        val powerUpIterator = powerUps.iterator()
+        while (powerUpIterator.hasNext()) {
+            val pu = powerUpIterator.next()
+            if (pu.overlapsWith(player)) {
+                // El jugador lo recogió
+                powerUpIterator.remove()
+                grantTripleShot()
+            }
+        }
+
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
+// ... starfield ...
+        for (pu in powerUps) {
+            pu.render(shapeRenderer)
+        }
+// ...
+        shapeRenderer.end()
+
+        if (tripleShotActive && TimeUtils.millis() > tripleShotEndTime) {
+            tripleShotActive = false
+        }
+
+        // Primero actualizar las estrellas y dibujarlas
+        updateStars(delta)
+        shapeRenderer.projectionMatrix = camera.combined
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
+        drawStarfield()
+        shapeRenderer.end()
+
         spriteBatch.projectionMatrix = camera.combined
         spriteBatch.begin()
         player.render(spriteBatch)
         for (enemy in enemies) {
-            spriteBatch.draw(enemyTexture, enemy.position.x, enemy.position.y, 20f, 20f)
+            enemy.render(spriteBatch)
         }
         spriteBatch.end()
 
+        shapeRenderer.projectionMatrix = camera.combined
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
-
-        // Dibujar los proyectiles
-        shapeRenderer.color = com.badlogic.gdx.graphics.Color.GREEN
+        drawPlayerHealthBar()
         for (projectile in projectiles) {
-            shapeRenderer.circle(projectile.position.x, projectile.position.y, 5f)
+            projectile.render(shapeRenderer)
         }
-
         shapeRenderer.end()
 
-        // Dibujar los joysticks
         stage.act(delta)
         stage.draw()
     }
 
+    fun grantTripleShot() {
+        tripleShotActive = true
+        tripleShotEndTime = TimeUtils.millis() + tripleShotDuration
+    }
+
+    private fun updateStars(delta: Float) {
+        updateLayer(starsFar, delta, 0.1f)
+        updateLayer(starsMid, delta, 0.5f)
+        updateLayer(starsNear, delta, 1.0f)
+    }
+
+    private fun updateLayer(layer: MutableList<Star>, delta: Float, factor: Float) {
+        val twinkleSpeed = 3.0f
+
+        for (star in layer) {
+            // Parpadeo
+            star.color.a += star.twinkleDirection * twinkleSpeed * delta
+            if (star.color.a > 1f) {
+                star.color.a = 1f
+                star.twinkleDirection = -1
+            } else if (star.color.a < 0.05f) {
+                star.color.a = 0.05f
+                star.twinkleDirection = 1
+            }
+
+            // Wrap-around global usando modulo
+            // Función auxiliar para hacer wrap-around
+            star.x = wrap(star.x, sectorWidth)
+            star.y = wrap(star.y, sectorHeight)
+        }
+    }
+
+    // Función wrap auxiliar
+    private fun wrap(value: Float, max: Float): Float {
+        var v = value % max
+        if (v < 0) v += max
+        return v
+    }
+
+    private fun getRandomEnemyType(): EnemyType {
+        return EnemyType.entries.random()
+    }
+
+    private fun showPauseMenu() {
+        val dialog = object : Dialog("Pausa", skin) {
+            override fun result(obj: Any?) {
+                if (obj == null) return
+                if (obj as Boolean) {
+                    isPaused = false
+                    hide()
+                } else {
+                    game.screen = MainMenuScreen(game)
+                    dispose()
+                }
+            }
+        }
+        dialog.text("Juego en pausa")
+        dialog.button("Reanudar", true)
+        dialog.button("Salir al menú", false)
+        dialog.show(stage)
+    }
+
+    private fun drawPlayerHealthBar() {
+        val healthPercentage = player.currentHealth.toFloat() / player.maxHealth.toFloat()
+        val healthColor = Color(
+            1 - healthPercentage,
+            healthPercentage,
+            0f,
+            1f
+        )
+        shapeRenderer.color = healthColor
+
+        val barWidth = player.width
+        val barHeight = 5f
+        val barX = player.position.x - barWidth / 2
+        val barY = player.position.y - player.height / 2 - barHeight - 5f
+
+        shapeRenderer.rect(barX, barY, barWidth * healthPercentage, barHeight)
+    }
+
     private fun spawnEnemy() {
-        // Distancia mínima y máxima para generar enemigos
         val minSpawnDistance = 500f
         val maxSpawnDistance = 1000f
 
-        // Generar un ángulo aleatorio
         val angle = Math.random() * 2 * Math.PI
+        val distance =
+            minSpawnDistance + Math.random().toFloat() * (maxSpawnDistance - minSpawnDistance)
 
-        // Generar una distancia aleatoria dentro del rango
-        val distance = minSpawnDistance + Math.random().toFloat() * (maxSpawnDistance - minSpawnDistance)
+        val spawnX = player.position.x + distance * cos(angle).toFloat()
+        val spawnY = player.position.y + distance * sin(angle).toFloat()
 
-        // Calcular posición de spawn
-        val spawnX = player.position.x + distance * Math.cos(angle).toFloat()
-        val spawnY = player.position.y + distance * Math.sin(angle).toFloat()
-
-        // Crear nuevo enemigo
-        val newEnemy = Enemy(Vector2(spawnX, spawnY))
-
+        val enemyType = getRandomEnemyType()
+        val newEnemy = EnemyFactory.createEnemy(enemyType, Vector2(spawnX, spawnY))
         enemies.add(newEnemy)
     }
 
     override fun resize(width: Int, height: Int) {
-        // Actualizar el viewport del stage
         stage.viewport.update(width, height, true)
     }
 
     override fun pause() {}
-
     override fun resume() {}
-
     override fun hide() {}
-
     override fun dispose() {
-        // Liberar recursos
         player.dispose()
         spriteBatch.dispose()
         shapeRenderer.dispose()
         stage.dispose()
-        enemyTexture.dispose()
+    }
+
+    override fun keyDown(keycode: Int): Boolean {
+        if (keycode == Input.Keys.BACK || keycode == Input.Keys.ESCAPE) {
+            if (!isPaused) {
+                isPaused = true
+                showPauseMenu()
+            }
+            return true
+        }
+        return false
+    }
+
+    override fun keyUp(keycode: Int): Boolean = false
+    override fun keyTyped(character: Char): Boolean = false
+    override fun touchDown(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean = false
+    override fun touchUp(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean = false
+    override fun touchDragged(screenX: Int, screenY: Int, pointer: Int): Boolean = false
+    override fun mouseMoved(screenX: Int, screenY: Int): Boolean = false
+    override fun scrolled(amountX: Float, amountY: Float): Boolean = false
+    override fun touchCancelled(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean {
+        return false
     }
 }
