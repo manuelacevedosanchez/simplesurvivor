@@ -19,7 +19,6 @@ open class Spaceship(
 ) {
     private var tripleShotActive = false
     private var tripleShotEndTime = 0L
-    private val tripleShotDuration = 5000L
 
     private var shieldActive = false
     private var shieldEndTime = 0L
@@ -27,7 +26,6 @@ open class Spaceship(
 
     private var chargedShotActive = false
     private var chargedShotEndTime = 0L
-    private val chargedShotDuration = 7000L // 7 segundos
 
     open fun updateRotation(targetPosition: Vector2) {
         rotation =
@@ -76,8 +74,7 @@ open class Spaceship(
         when (powerUp.type) {
             PowerUp.Type.HEALTH -> currentHealth = (currentHealth + 30).coerceAtMost(maxHealth)
             PowerUp.Type.TRIPLE_SHOT -> {
-                tripleShotActive = true
-                tripleShotEndTime = TimeUtils.millis() + tripleShotDuration
+                projectileType = ProjectileType.TRIPLE
             }
 
             PowerUp.Type.SHIELD -> {
@@ -87,22 +84,13 @@ open class Spaceship(
 
             PowerUp.Type.CHARGED_SHOT -> {
                 projectileType = ProjectileType.CHARGED
-                chargedShotActive = true
-                chargedShotEndTime = TimeUtils.millis() + chargedShotDuration
             }
         }
     }
 
     fun update(delta: Float) {
-        if (tripleShotActive && TimeUtils.millis() > tripleShotEndTime) {
-            tripleShotActive = false
-        }
         if (shieldActive && TimeUtils.millis() > shieldEndTime) {
             shieldActive = false
-        }
-        if (chargedShotActive && TimeUtils.millis() > chargedShotEndTime) {
-            chargedShotActive = false
-            projectileType = ProjectileType.BASIC
         }
     }
 

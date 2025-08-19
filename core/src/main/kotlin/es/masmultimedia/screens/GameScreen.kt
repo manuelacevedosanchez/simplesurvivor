@@ -306,7 +306,6 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
                             EnemyType.NORMAL -> 0.9
                             EnemyType.FAST -> 0.9
                             EnemyType.STRONG -> 0.9
-                            else -> 0.0
                         }
 
                         if (Math.random() < dropChance) {
@@ -315,7 +314,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
                                 EnemyType.NORMAL -> PowerUp.Type.CHARGED_SHOT
                                 EnemyType.FAST -> PowerUp.Type.TRIPLE_SHOT
                                 EnemyType.STRONG -> PowerUp.Type.SHIELD
-                                else -> PowerUp.Type.HEALTH // por defecto
+                                // por defecto
                             }
 
                             val color = when (type) {
@@ -341,44 +340,14 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             }
         }
 
-        if (TimeUtils.nanoTime() - lastShotTime > 500_000_000L) { // Disparo cada 0.5 seg
+        if (TimeUtils.nanoTime() - lastShotTime > 500_000_000L) {
             if (rotationTouchpad.isTouched) {
-                if (!player.isTripleShotActive()) {
-                    // Disparo normal
-                    val projectile = ProjectileFactory.createProjectile(
-                        type = player.projectileType,
-                        position = player.position.cpy(),
-                        direction = lastPlayerDirection.cpy()
-                    )
-                    projectiles.add(projectile)
-                } else {
-                    // Disparo triple
-                    // 1) Disparo central
-                    val pCenter = ProjectileFactory.createProjectile(
-                        type = player.projectileType,
-                        position = player.position.cpy(),
-                        direction = lastPlayerDirection.cpy()
-                    )
-
-                    // 2) Disparo izquierdo (rotamos -10 grados por ejemplo)
-                    val dirLeft = lastPlayerDirection.cpy().rotateDeg(-10f)
-                    val pLeft = ProjectileFactory.createProjectile(
-                        type = player.projectileType,
-                        position = player.position.cpy(),
-                        direction = dirLeft
-                    )
-
-                    // 3) Disparo derecho (rotamos +10 grados)
-                    val dirRight = lastPlayerDirection.cpy().rotateDeg(10f)
-                    val pRight = ProjectileFactory.createProjectile(
-                        type = player.projectileType,
-                        position = player.position.cpy(),
-                        direction = dirRight
-                    )
-
-                    // Añadir los tres disparos
-                    projectiles.addAll(listOf(pCenter, pLeft, pRight))
-                }
+                val newProjectiles = ProjectileFactory.createProjectiles(
+                    player.projectileType,
+                    player.position.cpy(),
+                    lastPlayerDirection.cpy()
+                )
+                projectiles.addAll(newProjectiles)
             }
             lastShotTime = TimeUtils.nanoTime()
         }

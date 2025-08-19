@@ -8,22 +8,46 @@ enum class ProjectileType {
     FAST,
     POWERFUL,
     CHARGED,
+    TRIPLE,
 }
 
 object ProjectileFactory {
-    fun createProjectile(type: ProjectileType, position: Vector2, direction: Vector2): Projectile {
+    fun createProjectiles(
+        type: ProjectileType,
+        position: Vector2,
+        direction: Vector2
+    ): List<Projectile> {
         return when (type) {
-            ProjectileType.BASIC -> BasicProjectile(position, direction)
-            ProjectileType.FAST -> FastProjectile(position, direction)
-            ProjectileType.POWERFUL -> PowerfulProjectile(position, direction)
-            ProjectileType.CHARGED -> Projectile(
-                position = position,
-                direction = direction,
-                speed = 400f,    // más lento que el normal
-                power = 50,      // mucho más daño
-                color = Color.YELLOW,
-                size = 8f      // bola más grande
+            ProjectileType.BASIC -> listOf(BasicProjectile(position, direction))
+
+            ProjectileType.FAST -> listOf(FastProjectile(position, direction))
+
+            ProjectileType.POWERFUL -> listOf(PowerfulProjectile(position, direction))
+
+            ProjectileType.CHARGED -> listOf(
+                Projectile(
+                    position = position,
+                    direction = direction,
+                    speed = 400f,
+                    power = 50,
+                    color = Color.YELLOW,
+                    size = 8f
+                )
             )
+
+            ProjectileType.TRIPLE -> {
+                val offset = 10f
+                val center = BasicProjectile(position.cpy(), direction)
+                val left = BasicProjectile(
+                    position.cpy().add(-offset, 0f),
+                    direction.cpy().rotateDeg(-10f)
+                )
+                val right =
+                    BasicProjectile(position.cpy().add(offset, 0f), direction.cpy().rotateDeg(10f))
+                listOf(center, left, right)
+            }
+
         }
     }
 }
+
