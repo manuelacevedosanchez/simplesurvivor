@@ -85,6 +85,10 @@ open class Spaceship(
             PowerUp.Type.CHARGED_SHOT -> {
                 projectileType = ProjectileType.CHARGED
             }
+
+            PowerUp.Type.LASER -> {
+                projectileType = ProjectileType.LASER
+            }
         }
     }
 

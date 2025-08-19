@@ -20,6 +20,7 @@ import com.badlogic.gdx.utils.TimeUtils
 import es.masmultimedia.entities.Enemy
 import es.masmultimedia.entities.EnemyFactory
 import es.masmultimedia.entities.EnemyType
+import es.masmultimedia.entities.LaserProjectile
 import es.masmultimedia.entities.PowerUp
 import es.masmultimedia.entities.Projectile
 import es.masmultimedia.entities.ProjectileFactory
@@ -27,6 +28,7 @@ import es.masmultimedia.entities.Spaceship
 import es.masmultimedia.entities.Star
 import es.masmultimedia.game.SimpleSurvivorGame
 import es.masmultimedia.utils.GameAssetManager
+import es.masmultimedia.utils.intersectsSegment
 import ktx.math.random
 import kotlin.math.cos
 import kotlin.math.sin
@@ -199,6 +201,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             PowerUp.Type.TRIPLE_SHOT -> Color.RED
             PowerUp.Type.SHIELD -> Color.CYAN
             PowerUp.Type.CHARGED_SHOT -> Color.YELLOW
+            PowerUp.Type.LASER -> Color.BLUE
         }
 
         powerUps.add(PowerUp(Vector2(spawnX, spawnY), radius = 10f, color = color, type = type))
@@ -297,46 +300,10 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
                     enemy.takeDamage(projectile.power)
                     projectileIterator.remove()
                     if (!enemy.isAlive()) {
-                        enemyIterator.remove()
-                        enemiesDefeated++
-                        score += 100
-
-                        // Probabilidad según tipo de enemigo
-                        val dropChance = when (enemy.type) {
-                            EnemyType.NORMAL -> 0.9
-                            EnemyType.FAST -> 0.9
-                            EnemyType.STRONG -> 0.9
-                        }
-
-                        if (Math.random() < dropChance) {
-
-                            val type = when (enemy.type) {
-                                EnemyType.NORMAL -> PowerUp.Type.CHARGED_SHOT
-                                EnemyType.FAST -> PowerUp.Type.TRIPLE_SHOT
-                                EnemyType.STRONG -> PowerUp.Type.SHIELD
-                                // por defecto
-                            }
-
-                            val color = when (type) {
-                                PowerUp.Type.HEALTH -> Color.GREEN
-                                PowerUp.Type.TRIPLE_SHOT -> Color.RED
-                                PowerUp.Type.SHIELD -> Color.CYAN
-                                PowerUp.Type.CHARGED_SHOT -> Color.YELLOW
-                            }
-
-                            powerUps.add(
-                                PowerUp(
-                                    enemy.position.cpy(),
-                                    radius = 10f,
-                                    color = color,
-                                    type = type
-                                )
-                            )
-                        }
-
-                        break
+                        killEnemy(enemy, enemyIterator)
                     }
                 }
+
             }
         }
 
@@ -356,9 +323,24 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         while (projectileIterator.hasNext()) {
             val projectile = projectileIterator.next()
             projectile.update()
-            if (projectile.position.dst(player.position) > 1000f) {
-                projectileIterator.remove()
+
+            if (projectile is LaserProjectile) {
+                val end = projectile.getEndPoint()
+                val enemyIterator = enemies.iterator()
+                while (enemyIterator.hasNext()) {
+                    val enemy = enemyIterator.next()
+                    if (enemy.bounds.intersectsSegment(projectile.origin, end)) {
+                        projectile.tryHit(enemy)
+                        if (!enemy.isAlive()) {
+                            killEnemy(enemy, enemyIterator)
+                        }
+                    }
+                }
+                if (projectile.isExpired()) {
+                    projectileIterator.remove()
+                }
             }
+
         }
 
         if (TimeUtils.timeSinceMillis(lastPowerUpSpawnTime) > powerUpSpawnInterval) {
@@ -544,6 +526,44 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             return true
         }
         return false
+    }
+
+    private fun killEnemy(enemy: Enemy, enemyIterator: MutableIterator<Enemy>) {
+        enemyIterator.remove()
+        enemiesDefeated++
+        score += 100
+
+        // Probabilidad según tipo de enemigo
+        val dropChance = when (enemy.type) {
+            EnemyType.NORMAL -> 0.9
+            EnemyType.FAST -> 0.9
+            EnemyType.STRONG -> 0.9
+        }
+
+        if (Math.random() < dropChance) {
+            val type = when (enemy.type) {
+                EnemyType.NORMAL -> PowerUp.Type.CHARGED_SHOT
+                EnemyType.FAST -> PowerUp.Type.TRIPLE_SHOT
+                EnemyType.STRONG -> PowerUp.Type.LASER
+            }
+
+            val color = when (type) {
+                PowerUp.Type.HEALTH -> Color.GREEN
+                PowerUp.Type.TRIPLE_SHOT -> Color.RED
+                PowerUp.Type.SHIELD -> Color.CYAN
+                PowerUp.Type.CHARGED_SHOT -> Color.YELLOW
+                PowerUp.Type.LASER -> Color.BLUE
+            }
+
+            powerUps.add(
+                PowerUp(
+                    enemy.position.cpy(),
+                    radius = 10f,
+                    color = color,
+                    type = type
+                )
+            )
+        }
     }
 
     override fun keyUp(keycode: Int): Boolean = false

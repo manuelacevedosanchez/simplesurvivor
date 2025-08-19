@@ -9,6 +9,7 @@ enum class ProjectileType {
     POWERFUL,
     CHARGED,
     TRIPLE,
+    LASER,
 }
 
 object ProjectileFactory {
@@ -46,6 +47,15 @@ object ProjectileFactory {
                     BasicProjectile(position.cpy().add(offset, 0f), direction.cpy().rotateDeg(10f))
                 listOf(center, left, right)
             }
+
+            ProjectileType.LASER -> listOf(
+                LaserProjectile(
+                    origin = position,
+                    direction = direction,
+                    length = 800f,
+                    duration = 300L,
+                )
+            )
 
         }
     }
