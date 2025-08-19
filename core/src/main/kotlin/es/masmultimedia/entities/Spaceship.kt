@@ -89,6 +89,10 @@ open class Spaceship(
             PowerUp.Type.LASER -> {
                 projectileType = ProjectileType.LASER
             }
+
+            PowerUp.Type.SATELLITE -> {
+                // Lo manejamos desde GameScreen porque afecta fuera de la nave
+            }
         }
     }
 

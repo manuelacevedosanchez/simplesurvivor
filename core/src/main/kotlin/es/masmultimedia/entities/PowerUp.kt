@@ -34,7 +34,7 @@ class PowerUp(
     }
 
     enum class Type {
-        HEALTH, TRIPLE_SHOT, SHIELD, CHARGED_SHOT, LASER,
+        HEALTH, TRIPLE_SHOT, SHIELD, CHARGED_SHOT, LASER, SATELLITE
     }
 
     fun isExpired(): Boolean = TimeUtils.timeSinceMillis(spawnTime) > lifetime

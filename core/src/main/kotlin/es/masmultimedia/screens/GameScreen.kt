@@ -24,6 +24,7 @@ import es.masmultimedia.entities.LaserProjectile
 import es.masmultimedia.entities.PowerUp
 import es.masmultimedia.entities.Projectile
 import es.masmultimedia.entities.ProjectileFactory
+import es.masmultimedia.entities.Satellite
 import es.masmultimedia.entities.Spaceship
 import es.masmultimedia.entities.Star
 import es.masmultimedia.game.SimpleSurvivorGame
@@ -68,6 +69,8 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
     private val starsFar = mutableListOf<Star>()
     private val starsMid = mutableListOf<Star>()
     private val starsNear = mutableListOf<Star>()
+
+    private var satellite: Satellite? = null
 
     private val sectorWidth = 10000f
     private val sectorHeight = 10000f
@@ -202,6 +205,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             PowerUp.Type.SHIELD -> Color.CYAN
             PowerUp.Type.CHARGED_SHOT -> Color.YELLOW
             PowerUp.Type.LASER -> Color.BLUE
+            PowerUp.Type.SATELLITE -> Color.WHITE
         }
 
         powerUps.add(PowerUp(Vector2(spawnX, spawnY), radius = 10f, color = color, type = type))
@@ -326,7 +330,9 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
 
             if (projectile is LaserProjectile) {
                 val end = projectile.getEndPoint()
+                // Actualizar enemigos
                 val enemyIterator = enemies.iterator()
+
                 while (enemyIterator.hasNext()) {
                     val enemy = enemyIterator.next()
                     if (enemy.bounds.intersectsSegment(projectile.origin, end)) {
@@ -355,13 +361,20 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             powerUp.update(delta)
         }
 
+        // Aquí actualizo el satélite
+        satellite?.update(delta, enemies, projectiles)
+
         val powerUpIterator = powerUps.iterator()
         while (powerUpIterator.hasNext()) {
             val pu = powerUpIterator.next()
             if (pu.overlapsWith(player)) {
                 // El jugador lo recogió
                 powerUpIterator.remove()
-                player.applyPowerUp(pu)
+                if (pu.type == PowerUp.Type.SATELLITE) {
+                    satellite = Satellite(player) // creamos el satélite
+                } else {
+                    player.applyPowerUp(pu)
+                }
             } else if (pu.isExpired()) {
                 powerUpIterator.remove() // desaparece tras 10s
             }
@@ -389,6 +402,8 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         for (enemy in enemies) {
             enemy.render(spriteBatch)
         }
+        // Renderizar satellite
+        satellite?.render(spriteBatch)
         spriteBatch.end()
 
         // Dibujar el círculo del escudo si está activo
@@ -540,9 +555,10 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             EnemyType.STRONG -> 0.9
         }
 
+        // Generar power-up soltado por el enemigo con una probabilidad ¡
         if (Math.random() < dropChance) {
             val type = when (enemy.type) {
-                EnemyType.NORMAL -> PowerUp.Type.CHARGED_SHOT
+                EnemyType.NORMAL -> PowerUp.Type.SATELLITE
                 EnemyType.FAST -> PowerUp.Type.TRIPLE_SHOT
                 EnemyType.STRONG -> PowerUp.Type.LASER
             }
@@ -553,6 +569,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
                 PowerUp.Type.SHIELD -> Color.CYAN
                 PowerUp.Type.CHARGED_SHOT -> Color.YELLOW
                 PowerUp.Type.LASER -> Color.BLUE
+                PowerUp.Type.SATELLITE -> Color.WHITE
             }
 
             powerUps.add(
