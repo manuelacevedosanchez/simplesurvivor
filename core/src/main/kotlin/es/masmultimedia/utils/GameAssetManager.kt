@@ -50,6 +50,8 @@ object GameAssetManager {
             "logo.png",
 
             // Otras texturas utilizadas en el juego
+            "satellite.png",
+
             // Añadir aquí cualquier otra textura que se utilice
         )
 
@@ -67,17 +69,22 @@ object GameAssetManager {
     }
 
     fun getTexture(path: String): Texture {
-        // Verificar si la textura está cargada
+        // Si ya está cargada, la devolvemos
         if (manager.isLoaded(path, Texture::class.java)) {
             return manager.get(path, Texture::class.java)
-        } else {
-            // Manejar el caso donde la textura no esté cargada
-            Gdx.app.log(
-                "GameAssetManager",
-                "La textura $path no está cargada. Se usará una textura por defecto."
-            )
-            return getDefaultTexture()
         }
+
+        // Si no está cargada, intentamos cargarla en caliente
+        if (Gdx.files.internal(path).exists()) {
+            Gdx.app.log("GameAssetManager", "Cargando textura en caliente: $path")
+            manager.load(path, Texture::class.java)
+            manager.finishLoadingAsset<Texture>(path) // Espera sólo a ese asset
+            return manager.get(path, Texture::class.java)
+        }
+
+        // Si tampoco existe en assets, devolvemos la textura por defecto
+        Gdx.app.log("GameAssetManager", "La textura $path no existe. Usando textura por defecto.")
+        return getDefaultTexture()
     }
 
     fun getDefaultTexture(): Texture {
