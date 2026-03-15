@@ -8,6 +8,15 @@ object Constants {
     // Reserved for upcoming enemy shooters.
     const val MAX_ACTIVE_ENEMY_PROJECTILES = 120
 
+    // Timed asteroid storm event.
+    const val ASTEROID_STORM_INTERVAL_MS = 60_000L
+    const val ASTEROID_STORM_DURATION_MS = 15_000L
+    const val ASTEROID_STORM_SPAWN_INTERVAL_MS = 400L
+
+    // Score milestone shop.
+    const val SHOP_FIRST_MILESTONE_SCORE = 2_000
+    const val SHOP_MILESTONE_STEP_SCORE = 2_000
+
     const val MAX_PROJECTILE_TRAVEL_DISTANCE = 2400f
     const val MAX_PROJECTILE_LIFETIME_MS = 8000L
 

@@ -5,7 +5,9 @@ import com.badlogic.gdx.Input
 import com.badlogic.gdx.InputMultiplexer
 import com.badlogic.gdx.InputProcessor
 import com.badlogic.gdx.Screen
+import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.GL20
+import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator
 import com.badlogic.gdx.scenes.scene2d.InputEvent
 import com.badlogic.gdx.scenes.scene2d.Stage
 import com.badlogic.gdx.scenes.scene2d.ui.Dialog
@@ -33,41 +35,67 @@ class GameOverScreen(
     override fun show() {
         val skin = Skin(Gdx.files.internal("uiskin.json"))
 
+        // Build density-aware fonts so the screen is readable on any phone.
+        val generator = FreeTypeFontGenerator(Gdx.files.internal("wheaton_capitals.otf"))
+        val titleFont = generator.generateFont(FreeTypeFontGenerator.FreeTypeFontParameter().apply {
+            size  = (Gdx.graphics.height * 0.07f).toInt().coerceAtLeast(28)
+            color = Color.WHITE
+        })
+        val bodyFont = generator.generateFont(FreeTypeFontGenerator.FreeTypeFontParameter().apply {
+            size  = (Gdx.graphics.height * 0.045f).toInt().coerceAtLeast(18)
+            color = Color.WHITE
+        })
+        generator.dispose()
+
+        val titleStyle  = Label.LabelStyle(titleFont, Color.WHITE)
+        val bodyStyle   = Label.LabelStyle(bodyFont,  Color.WHITE)
+        val buttonStyle = TextButton.TextButtonStyle().apply {
+            up   = skin.getDrawable("default-round")
+            down = skin.getDrawable("default-round-down")
+            font = bodyFont
+        }
+        val fieldStyle = skin.get(TextField.TextFieldStyle::class.java).also {
+            it.font = bodyFont
+        }
+
+        val btnWidth  = Gdx.graphics.width  * 0.55f
+        val btnHeight = Gdx.graphics.height * 0.095f
+        val padBottom = Gdx.graphics.height * 0.025f
+
         // Build a table layout for the widgets.
         val table = Table()
         table.setFillParent(true)
         table.center()
 
         // End title (loss/win/custom message).
-        val titleLabel = Label(endMessage, skin)
-        titleLabel.setFontScale(2f)
+        val titleLabel = Label(endMessage, titleStyle)
 
         // Display score and run stats.
-        val scoreLabel = Label("Puntuación: $score", skin)
-        val enemiesLabel = Label("Enemigos eliminados: $enemiesDefeated", skin)
-        val timeLabel = Label("Tiempo jugado: ${timePlayed / 1000} segundos", skin)
+        val scoreLabel   = Label("Puntuación: $score", bodyStyle)
+        val enemiesLabel = Label("Enemigos eliminados: $enemiesDefeated", bodyStyle)
+        val timeLabel    = Label("Tiempo jugado: ${timePlayed / 1000} segundos", bodyStyle)
 
         // Check whether this score qualifies as a high score.
         val isHighScore = checkIfHighScore(score)
 
         // Name input shown only for high-score entries.
-        val nameLabel = Label("Introduce tu nombre:", skin)
-        val nameTextField = TextField("", skin)
-        val saveButton = TextButton("Guardar Puntuación", skin)
+        val nameLabel     = Label("Introduce tu nombre:", bodyStyle)
+        val nameTextField = TextField("", skin).also { it.style = fieldStyle }
+        val saveButton    = TextButton("Guardar Puntuación", skin).also { it.style = buttonStyle }
 
         saveButton.addListener(object : ClickListener() {
             override fun clicked(event: InputEvent?, x: Float, y: Float) {
                 val playerName = nameTextField.text
                 if (playerName.isNotEmpty()) {
                     highScoreManager.addHighScore(playerName, score)
-                    showSavedDialog()
+                    showSavedDialog(skin, bodyFont)
                 }
             }
         })
 
         // Create action buttons.
-        val retryButton = TextButton("Volver a jugar", skin)
-        val menuButton = TextButton("Menú principal", skin)
+        val retryButton = TextButton("Volver a jugar", skin).also { it.style = buttonStyle }
+        val menuButton  = TextButton("Menú principal",  skin).also { it.style = buttonStyle }
 
         // Attach button listeners.
         retryButton.addListener(object : ClickListener() {
@@ -85,19 +113,19 @@ class GameOverScreen(
         })
 
         // Add widgets to the table.
-        table.add(titleLabel).padBottom(40f).row()
-        table.add(scoreLabel).padBottom(20f).row()
-        table.add(enemiesLabel).padBottom(20f).row()
-        table.add(timeLabel).padBottom(40f).row()
+        table.add(titleLabel).padBottom(padBottom * 1.5f).row()
+        table.add(scoreLabel).padBottom(padBottom).row()
+        table.add(enemiesLabel).padBottom(padBottom).row()
+        table.add(timeLabel).padBottom(padBottom * 1.5f).row()
 
         if (isHighScore) {
-            table.add(nameLabel).padBottom(10f).row()
-            table.add(nameTextField).width(200f).padBottom(20f).row()
-            table.add(saveButton).width(200f).height(50f).padBottom(20f).row()
+            table.add(nameLabel).padBottom(padBottom * 0.5f).row()
+            table.add(nameTextField).width(btnWidth).padBottom(padBottom).row()
+            table.add(saveButton).size(btnWidth, btnHeight).padBottom(padBottom).row()
         }
 
-        table.add(retryButton).width(200f).height(50f).padBottom(20f).row()
-        table.add(menuButton).width(200f).height(50f)
+        table.add(retryButton).size(btnWidth, btnHeight).padBottom(padBottom).row()
+        table.add(menuButton).size(btnWidth, btnHeight)
 
         // Add table to stage.
         stage.addActor(table)
@@ -116,9 +144,10 @@ class GameOverScreen(
         return score > lowestHighScore
     }
 
-    private fun showSavedDialog() {
-        val dialog = Dialog("Puntuación Guardada", Skin(Gdx.files.internal("uiskin.json")))
-        dialog.text("¡Tu puntuación ha sido guardada!")
+    private fun showSavedDialog(skin: Skin, bodyFont: com.badlogic.gdx.graphics.g2d.BitmapFont) {
+        val dialog = Dialog("Puntuación Guardada", skin)
+        val bodyStyle = Label.LabelStyle(bodyFont, com.badlogic.gdx.graphics.Color.WHITE)
+        dialog.contentTable.add(Label("¡Tu puntuación ha sido guardada!", bodyStyle)).pad(20f)
         dialog.button("OK")
         dialog.show(stage)
     }

@@ -74,6 +74,26 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
     private var enemySpawnInterval = 5000L // Initial interval: 5 seconds
     private var lastPlayerDirection = Vector2(1f, 0f) // Default direction: to the right
 
+    // Runtime upgrades from shop purchases.
+    private var moveSpeedMultiplier = 1f
+    private var damageTakenMultiplier = 1f
+    private var shotCooldownNanos = 500_000_000L
+
+    // Shop progression by score milestones.
+    private var nextShopMilestoneScore = Constants.SHOP_FIRST_MILESTONE_SCORE
+    // Peak score ever reached this run – used to avoid re-triggering the shop
+    // if the player spends score and climbs back to the same milestone.
+    private var peakScore = 0
+    private var shopOpen = false
+    private var pendingShopOpen = false
+
+    // Timed asteroid storm event.
+    private val asteroids = mutableListOf<Asteroid>()
+    private var nextStormStartTime = 0L
+    private var stormActive = false
+    private var stormEndTime = 0L
+    private var lastAsteroidSpawnTime = 0L
+
     private lateinit var stage: Stage
     private lateinit var movementTouchpad: Touchpad
     private lateinit var rotationTouchpad: Touchpad
@@ -93,9 +113,16 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
     // HUD
     private lateinit var hudStage: Stage
     private lateinit var hudFont: BitmapFont
+    private lateinit var hudStatsFont: BitmapFont
     private lateinit var labelScore: Label
     private lateinit var labelTime: Label
     private lateinit var labelKills: Label
+    private lateinit var labelEvent: Label
+    private lateinit var labelStatHp: Label
+    private lateinit var labelStatSpeed: Label
+    private lateinit var labelStatFireRate: Label
+    private lateinit var labelStatDmgReduc: Label
+    private lateinit var labelStatWeapon: Label
     private lateinit var markerCountFont: BitmapFont
 
     // HUD caches and reusable vectors to avoid per-frame allocations.
@@ -109,6 +136,9 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
     private val markerColorNormal = Color(1f, 0.35f, 0.25f, 0.9f)
     private val markerColorFast = Color(1f, 0.85f, 0.25f, 0.95f)
     private val markerColorStrong = Color(0.95f, 0.25f, 0.95f, 1f)
+
+    // Storm telegraph window shown before each asteroid storm starts.
+    private val stormTelegraphMs = 3_000L
 
     override fun show() {
         camera = OrthographicCamera().apply {
@@ -126,6 +156,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
 
         gameStartTime = TimeUtils.millis()
         lastEnemySpawnTime = TimeUtils.millis()
+        nextStormStartTime = gameStartTime + Constants.ASTEROID_STORM_INTERVAL_MS
 
         stage = Stage()
         Gdx.input.inputProcessor = stage
@@ -185,6 +216,15 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         }
         hudFont = generator.generateFont(params)
 
+        val statsParams = FreeTypeFontGenerator.FreeTypeFontParameter().apply {
+            size = (Gdx.graphics.height * 0.028f).toInt().coerceAtLeast(11)
+            color = Color.WHITE
+            shadowColor = Color(0f, 0f, 0f, 0.7f)
+            shadowOffsetX = 1
+            shadowOffsetY = -1
+        }
+        hudStatsFont = generator.generateFont(statsParams)
+
         val markerParams = FreeTypeFontGenerator.FreeTypeFontParameter().apply {
             size = (Gdx.graphics.height * 0.028f).toInt().coerceAtLeast(12)
             color = Color.WHITE
@@ -195,31 +235,70 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         markerCountFont = generator.generateFont(markerParams)
         generator.dispose()
 
-        val labelStyle = Label.LabelStyle(hudFont, Color.WHITE)
+        val labelStyle      = Label.LabelStyle(hudFont,      Color.WHITE)
+        val eventLabelStyle = Label.LabelStyle(hudFont,      Color(1f, 0.55f, 0.25f, 1f))
+        val statsLabelStyle = Label.LabelStyle(hudStatsFont, Color(0.85f, 0.85f, 0.85f, 0.9f))
+        val statsValueStyle = Label.LabelStyle(hudStatsFont, Color(0.6f, 1f, 0.6f, 1f))
 
         labelKills = Label("Kills: 0", labelStyle)
         labelTime  = Label("0:00", labelStyle)
         labelScore = Label("Score: 0", labelStyle)
+        labelEvent = Label("", eventLabelStyle)
         labelScore.setAlignment(Align.right)
+        labelEvent.setAlignment(Align.center)
 
         hudScoreText = "Score: ${formatCompactNumber(score)}"
         hudKillsText = "Kills: ${formatCompactNumber(enemiesDefeated)}"
         labelScore.setText(hudScoreText)
         labelKills.setText(hudKillsText)
 
+        // Live ship/weapon stats labels (values updated every frame).
+        labelStatHp       = Label("100 / 100", statsValueStyle)
+        labelStatSpeed    = Label("100%",       statsValueStyle)
+        labelStatFireRate = Label("500 ms",     statsValueStyle)
+        labelStatDmgReduc = Label("-0%",        statsValueStyle)
+        labelStatWeapon   = Label("BASIC",      statsValueStyle)
+
+        // Stats sub-table – two columns: label name | value
+        val statsTable = Table()
+        fun statRow(name: String, valueLabel: Label) {
+            statsTable.add(Label(name, statsLabelStyle)).left().padRight(6f)
+            statsTable.add(valueLabel).left().row()
+        }
+        statRow("HP:",      labelStatHp)
+        statRow("Speed:",   labelStatSpeed)
+        statRow("Fire:",    labelStatFireRate)
+        statRow("Armor:",   labelStatDmgReduc)
+        statRow("Weapon:",  labelStatWeapon)
+
         val pad = Gdx.graphics.width * 0.025f
         val sideMinWidth = Gdx.graphics.width * 0.30f
 
-        val table = Table().apply {
+        // Root table: top bar (kills | time | score) + left stats panel below
+        val root = Table().apply {
             setFillParent(true)
             top()
             pad(pad)
-            add(labelKills).minWidth(sideMinWidth).expandX().left()
-            add(labelTime).expandX().center()
-            add(labelScore).minWidth(sideMinWidth).expandX().right()
         }
 
-        hudStage.addActor(table)
+        // Top row
+        root.add(labelKills).minWidth(sideMinWidth).expandX().left()
+        root.add(labelTime).expandX().center()
+        root.add(labelScore).minWidth(sideMinWidth).expandX().right()
+        root.row()
+
+        // Stats panel anchored top-left, second row
+        root.add(statsTable).top().left().padTop(pad * 0.5f)
+        root.add()  // empty center cell
+        root.add()  // empty right cell
+        root.row()
+
+        // Event telegraph row centered under top HUD.
+        root.add()
+        root.add(labelEvent).padTop(pad * 0.35f).center()
+        root.add()
+
+        hudStage.addActor(root)
     }
 
     private fun generateStars() {
@@ -329,6 +408,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
 
         camera.position.set(player.position.x, player.position.y, 0f)
         camera.update()
+        val nowMillis = TimeUtils.millis()
 
         val moveX = movementTouchpad.knobPercentX
         val moveY = movementTouchpad.knobPercentY
@@ -337,7 +417,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             val playerDirection = Vector2(moveX, moveY)
             if (playerDirection.len() > 0) {
                 playerDirection.nor()
-                player.updatePosition(playerDirection, Gdx.graphics.deltaTime)
+                player.updatePosition(playerDirection, Gdx.graphics.deltaTime * moveSpeedMultiplier)
             }
         }
 
@@ -351,6 +431,13 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
 
         updatePlayerBounds()
         pruneProjectiles()
+        updateAsteroidStorm(nowMillis, delta)
+
+        if (pendingShopOpen && !shopOpen) {
+            pendingShopOpen = false
+            showShopDialog()
+            return
+        }
 
         val effectiveEnemySpawnInterval = getEffectiveEnemySpawnInterval()
         if (TimeUtils.timeSinceMillis(lastEnemySpawnTime) > effectiveEnemySpawnInterval) {
@@ -369,7 +456,8 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             enemy.moveTowards(player.position)
 
             if (enemy.bounds.overlaps(playerBounds)) {
-                player.takeDamage(20)
+                val contactDamage = (20f * damageTakenMultiplier).toInt().coerceAtLeast(1)
+                player.takeDamage(contactDamage)
                 enemyIterator.remove()
                 if (!player.isAlive()) {
                     gameEnded = true
@@ -398,7 +486,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             }
         }
 
-        if (TimeUtils.nanoTime() - lastShotTime > 500_000_000L) {
+        if (TimeUtils.nanoTime() - lastShotTime > shotCooldownNanos) {
             if (rotationTouchpad.isTouched) {
                 val newProjectiles = ProjectileFactory.createProjectiles(
                     player.projectileType,
@@ -465,18 +553,15 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             }
         }
 
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
-// ... starfield ...
-        for (pu in powerUps) {
-            pu.render(shapeRenderer)
-        }
-// ...
-        shapeRenderer.end()
-
         updateStars(delta)
         shapeRenderer.projectionMatrix = camera.combined
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
         drawStarfield()
+        drawAsteroids()
+        // Render power-ups in world space (camera.combined already set above).
+        for (pu in powerUps) {
+            pu.render(shapeRenderer)
+        }
         shapeRenderer.end()
 
         spriteBatch.projectionMatrix = camera.combined
@@ -517,6 +602,18 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         val seconds = elapsedSeconds % 60
         labelTime.setText("%d:%02d".format(minutes, seconds))
 
+        // Telegraph / active storm status.
+        val hudNow = TimeUtils.millis()
+        val telegraphRemaining = nextStormStartTime - hudNow
+        if (stormActive) {
+            labelEvent.setText("ASTEROID STORM!")
+        } else if (telegraphRemaining in 1..stormTelegraphMs) {
+            val secLeft = ((telegraphRemaining + 999L) / 1000L).coerceAtLeast(1L)
+            labelEvent.setText("STORM INCOMING: ${secLeft}s")
+        } else {
+            labelEvent.setText("")
+        }
+
         val nextScoreText = "Score: ${formatCompactNumber(score)}"
         if (nextScoreText != hudScoreText) {
             hudScoreText = nextScoreText
@@ -528,6 +625,22 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             hudKillsText = nextKillsText
             labelKills.setText(hudKillsText)
         }
+
+        // Update live ship/weapon stats (only when values change to avoid string alloc every frame).
+        val hpText = "${player.currentHealth} / ${player.maxHealth}"
+        if (labelStatHp.text.toString() != hpText) labelStatHp.setText(hpText)
+
+        val speedText = "${(moveSpeedMultiplier * 100).toInt()}%"
+        if (labelStatSpeed.text.toString() != speedText) labelStatSpeed.setText(speedText)
+
+        val fireText = "${shotCooldownNanos / 1_000_000L} ms"
+        if (labelStatFireRate.text.toString() != fireText) labelStatFireRate.setText(fireText)
+
+        val armorText = "-${((1f - damageTakenMultiplier) * 100).toInt().coerceAtLeast(0)}%"
+        if (labelStatDmgReduc.text.toString() != armorText) labelStatDmgReduc.setText(armorText)
+
+        val weaponText = player.projectileType.name
+        if (labelStatWeapon.text.toString() != weaponText) labelStatWeapon.setText(weaponText)
 
         hudStage.act(delta)
         hudStage.draw()
@@ -655,6 +768,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         stage.dispose()
         hudStage.dispose()
         hudFont.dispose()
+        hudStatsFont.dispose()
         markerCountFont.dispose()
     }
 
@@ -690,6 +804,14 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
 
         enemiesDefeated++
         score += enemyScore
+
+        // Update peak score and check shop milestone against it,
+        // so spending score and recovering doesn't re-trigger the same milestone.
+        if (score > peakScore) peakScore = score
+        if (peakScore >= nextShopMilestoneScore) {
+            pendingShopOpen = true
+            nextShopMilestoneScore += Constants.SHOP_MILESTONE_STEP_SCORE
+        }
 
         val dropChance = when (enemy.type) {
             EnemyType.NORMAL -> 0.9
@@ -790,6 +912,292 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         return "$sign$absValue"
     }
 
+    private fun updateAsteroidStorm(nowMillis: Long, delta: Float) {
+        if (!stormActive && nowMillis >= nextStormStartTime) {
+            stormActive = true
+            // Random storm duration between 5 and 10 seconds.
+            val stormDurationMs = (5_000L..10_000L).random()
+            stormEndTime = nowMillis + stormDurationMs
+            lastAsteroidSpawnTime = 0L
+        }
+
+        if (stormActive && nowMillis >= stormEndTime) {
+            stormActive = false
+            nextStormStartTime = nowMillis + Constants.ASTEROID_STORM_INTERVAL_MS
+            // Clear any leftover asteroids when the storm ends.
+            asteroids.clear()
+        }
+
+        if (stormActive && nowMillis - lastAsteroidSpawnTime >= Constants.ASTEROID_STORM_SPAWN_INTERVAL_MS) {
+            spawnAsteroid()
+            lastAsteroidSpawnTime = nowMillis
+        }
+
+        val playerRadius = player.width * 0.35f
+        val asteroidIterator = asteroids.iterator()
+        while (asteroidIterator.hasNext()) {
+            val asteroid = asteroidIterator.next()
+            asteroid.position.mulAdd(asteroid.velocity, delta)
+            asteroid.lifeSeconds -= delta
+
+            // Check projectile hits on this asteroid.
+            var destroyedByProjectile = false
+            val projectileIterator = projectiles.iterator()
+            while (projectileIterator.hasNext()) {
+                val projectile = projectileIterator.next()
+                if (projectile is LaserProjectile) continue
+                val hitRadius = asteroid.radius + projectile.size
+                if (asteroid.position.dst2(projectile.position) <= hitRadius * hitRadius) {
+                    projectileIterator.remove()
+                    asteroid.hp -= projectile.power
+                    if (asteroid.hp <= 0) {
+                        destroyedByProjectile = true
+                        break
+                    }
+                }
+            }
+            if (destroyedByProjectile) {
+                asteroidIterator.remove()
+                continue
+            }
+
+            // Check player collision.
+            val hitDistance = asteroid.radius + playerRadius
+            if (asteroid.position.dst2(player.position) <= hitDistance * hitDistance) {
+                val damage = (asteroid.damage * damageTakenMultiplier).toInt().coerceAtLeast(1)
+                player.takeDamage(damage)
+                asteroidIterator.remove()
+
+                if (!player.isAlive()) {
+                    gameEnded = true
+                    gameEndMessage = "Destroyed by asteroid storm"
+                    return
+                }
+                continue
+            }
+
+            if (asteroid.lifeSeconds <= 0f) {
+                asteroidIterator.remove()
+            }
+        }
+    }
+
+    private fun spawnAsteroid() {
+        val angle = Math.random().toFloat() * 360f
+        val direction = Vector2(1f, 0f).setAngleDeg(angle)
+        val spawnDistance = maxOf(camera.viewportWidth, camera.viewportHeight) * 0.8f + 140f
+
+        val spawnPos = Vector2(player.position).mulAdd(direction, spawnDistance)
+        val travelDirection = Vector2(player.position).sub(spawnPos).nor()
+
+        val radius = (18f..36f).random()
+        val speed = (160f..260f).random()
+        val damage = (12..22).random()
+
+        asteroids.add(
+            Asteroid(
+                position = spawnPos,
+                velocity = travelDirection.scl(speed),
+                radius = radius,
+                damage = damage,
+                lifeSeconds = 8f
+            )
+        )
+    }
+
+    private fun drawAsteroids() {
+        if (asteroids.isEmpty()) return
+
+        for (asteroid in asteroids) {
+            shapeRenderer.color = Color(0.45f, 0.42f, 0.38f, 1f)
+            shapeRenderer.circle(asteroid.position.x, asteroid.position.y, asteroid.radius)
+            shapeRenderer.color = Color(0.30f, 0.28f, 0.25f, 1f)
+            shapeRenderer.circle(
+                asteroid.position.x + asteroid.radius * 0.25f,
+                asteroid.position.y - asteroid.radius * 0.2f,
+                asteroid.radius * 0.35f
+            )
+        }
+    }
+
+    private fun showShopDialog() {
+        if (shopOpen) return
+        shopOpen = true
+        isPaused = true
+
+        val dialogSkin = Skin(Gdx.files.internal("uiskin.json"))
+        val generator = FreeTypeFontGenerator(Gdx.files.internal("wheaton_capitals.otf"))
+
+        // Scale font sizes relative to screen height so the dialog is readable on mobile.
+        val titleFont = generator.generateFont(FreeTypeFontGenerator.FreeTypeFontParameter().apply {
+            size = (Gdx.graphics.height * 0.055f).toInt().coerceAtLeast(22)
+            color = Color.WHITE
+        })
+        val bodyFont = generator.generateFont(FreeTypeFontGenerator.FreeTypeFontParameter().apply {
+            size = (Gdx.graphics.height * 0.038f).toInt().coerceAtLeast(15)
+            color = Color.WHITE
+        })
+        val smallFont = generator.generateFont(FreeTypeFontGenerator.FreeTypeFontParameter().apply {
+            size = (Gdx.graphics.height * 0.030f).toInt().coerceAtLeast(12)
+            color = Color.WHITE
+        })
+        generator.dispose()
+
+        val titleStyle  = Label.LabelStyle(titleFont, Color.WHITE)
+        val bodyStyle   = Label.LabelStyle(bodyFont,  Color.WHITE)
+        val smallStyle  = Label.LabelStyle(smallFont, Color.WHITE)
+        val statStyle   = Label.LabelStyle(smallFont, Color(0.75f, 1f, 0.75f, 1f)) // soft green for stat values
+        val buttonStyle = com.badlogic.gdx.scenes.scene2d.ui.TextButton.TextButtonStyle().apply {
+            up   = dialogSkin.getDrawable("default-round")
+            down = dialogSkin.getDrawable("default-round-down")
+            font = bodyFont
+        }
+
+        // Roll offer prices each time the shop opens or rerolls.
+        fun rolledCost(base: Int): Int {
+            val factor = (0.85f..1.15f).random()
+            return ((base * factor) / 50f).toInt().coerceAtLeast(1) * 50
+        }
+
+        val rapidCost = rolledCost(1200)
+        val engineCost = rolledCost(1000)
+        val hullCost = rolledCost(1100)
+        val repairCost = rolledCost(700)
+        val rerollCost = rolledCost(450)
+
+        val dialog = Dialog("", dialogSkin)
+
+        fun closeShopDialog() {
+            titleFont.dispose()
+            bodyFont.dispose()
+            smallFont.dispose()
+            shopOpen = false
+            isPaused = false
+            dialog.hide()
+        }
+
+        fun applyUpgrade(option: String) {
+            when (option) {
+                "rapid"  -> if (score >= rapidCost) {
+                    score -= rapidCost
+                    shotCooldownNanos = (shotCooldownNanos * 0.85f).toLong().coerceAtLeast(160_000_000L)
+                }
+                "engine" -> if (score >= engineCost) {
+                    score -= engineCost
+                    moveSpeedMultiplier = (moveSpeedMultiplier + 0.15f).coerceAtMost(2.2f)
+                }
+                "hull"   -> if (score >= hullCost) {
+                    score -= hullCost
+                    damageTakenMultiplier = (damageTakenMultiplier * 0.9f).coerceAtLeast(0.45f)
+                }
+                "repair" -> if (score >= repairCost) {
+                    score -= repairCost
+                    player.currentHealth = (player.currentHealth + 35).coerceAtMost(player.maxHealth)
+                }
+                "reroll" -> if (score >= rerollCost) {
+                    score -= rerollCost
+                    closeShopDialog()
+                    // Open a fresh dialog with newly rolled prices.
+                    showShopDialog()
+                    return
+                }
+            }
+            closeShopDialog()
+        }
+
+        val btnWidth  = Gdx.graphics.width  * 0.33f
+        val btnHeight = Gdx.graphics.height * 0.09f
+        val pad       = Gdx.graphics.height * 0.022f
+        val statColW  = Gdx.graphics.width  * 0.28f
+
+        // Derived readable stat values for the left stats panel.
+        val fireRateMs   = shotCooldownNanos / 1_000_000L
+        val speedPct     = (moveSpeedMultiplier * 100).toInt()
+        val dmgReductPct = ((1f - damageTakenMultiplier) * 100).toInt().coerceAtLeast(0)
+        val hp           = player.currentHealth
+        val maxHp        = player.maxHealth
+
+        // ── Stats panel (left column) ──────────────────────────────────────
+        val statsTable = Table()
+        statsTable.add(Label("SHIP STATS", titleStyle)).padBottom(pad * 0.8f).left().row()
+
+        fun statRow(label: String, value: String) {
+            statsTable.add(Label(label, smallStyle)).left().padRight(pad * 0.4f)
+            statsTable.add(Label(value, statStyle)).right().row()
+        }
+        statRow("HP:",         "$hp / $maxHp")
+        statRow("Speed:",      "${speedPct}%")
+        statRow("Fire rate:",  "${fireRateMs} ms")
+        statRow("Dmg reduc:", "-${dmgReductPct}%")
+
+        // ── Shop panel (right column) ──────────────────────────────────────
+        val shopTable = Table()
+        shopTable.add(Label("MILESTONE SHOP", titleStyle)).padBottom(pad * 0.5f).colspan(2).center().row()
+        shopTable.add(Label("Score: $score", bodyStyle)).padBottom(pad * 0.8f).colspan(2).center().row()
+
+        fun upgradeBtn(label: String, preview: String, cost: Int, key: String) {
+            val btn = com.badlogic.gdx.scenes.scene2d.ui.TextButton("$label\n$preview\n(-$cost pts)", buttonStyle)
+            btn.addListener(object : com.badlogic.gdx.scenes.scene2d.utils.ClickListener() {
+                override fun clicked(event: com.badlogic.gdx.scenes.scene2d.InputEvent?, x: Float, y: Float) {
+                    applyUpgrade(key)
+                }
+            })
+            shopTable.add(btn).size(btnWidth, btnHeight).pad(pad * 0.4f)
+        }
+
+        val currentRapidMs = shotCooldownNanos / 1_000_000L
+        val newRapidMs = (shotCooldownNanos * 0.85f).toLong().coerceAtLeast(160_000_000L) / 1_000_000L
+
+        val currentSpeed = (moveSpeedMultiplier * 100).toInt()
+        val newSpeed = ((moveSpeedMultiplier + 0.15f).coerceAtMost(2.2f) * 100).toInt()
+
+        val currentReduc = ((1f - damageTakenMultiplier) * 100).toInt().coerceAtLeast(0)
+        val newReduc = ((1f - (damageTakenMultiplier * 0.9f).coerceAtLeast(0.45f)) * 100).toInt().coerceAtLeast(0)
+
+        val currentHp = player.currentHealth
+        val newHp = (player.currentHealth + 35).coerceAtMost(player.maxHealth)
+
+        upgradeBtn("Rapid Fire", "${currentRapidMs}ms -> ${newRapidMs}ms", rapidCost, "rapid")
+        upgradeBtn("Engine", "${currentSpeed}% -> ${newSpeed}%", engineCost, "engine")
+        shopTable.row()
+        upgradeBtn("Hull", "-${currentReduc}% -> -${newReduc}%", hullCost, "hull")
+        upgradeBtn("Repair", "$currentHp -> $newHp HP", repairCost, "repair")
+        shopTable.row()
+
+        val rerollBtn = com.badlogic.gdx.scenes.scene2d.ui.TextButton("Reroll Offers\n(-$rerollCost pts)", buttonStyle)
+        rerollBtn.addListener(object : com.badlogic.gdx.scenes.scene2d.utils.ClickListener() {
+            override fun clicked(event: com.badlogic.gdx.scenes.scene2d.InputEvent?, x: Float, y: Float) {
+                applyUpgrade("reroll")
+            }
+        })
+
+        val skipBtn = com.badlogic.gdx.scenes.scene2d.ui.TextButton("Saltar", buttonStyle)
+        skipBtn.addListener(object : com.badlogic.gdx.scenes.scene2d.utils.ClickListener() {
+            override fun clicked(event: com.badlogic.gdx.scenes.scene2d.InputEvent?, x: Float, y: Float) {
+                applyUpgrade("skip")
+            }
+        })
+
+        shopTable.add(rerollBtn).size(btnWidth, btnHeight).pad(pad).colspan(2).center().row()
+        shopTable.add(skipBtn).size(btnWidth, btnHeight).pad(pad).colspan(2).center().row()
+
+        // ── Assemble dialog ────────────────────────────────────────────────
+        dialog.contentTable.pad(pad)
+        dialog.contentTable.add(statsTable).width(statColW).top().padRight(pad * 1.5f)
+        dialog.contentTable.add(shopTable).top()
+
+        dialog.show(stage)
+    }
+
+    private data class Asteroid(
+        val position: Vector2,
+        val velocity: Vector2,
+        val radius: Float,
+        val damage: Int,
+        var lifeSeconds: Float,
+        var hp: Int = 40
+    )
+
     private fun drawEnemyEdgeIndicators() {
         if (enemies.isEmpty()) return
 
@@ -862,7 +1270,23 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
 
         shapeRenderer.end()
 
-        // Draw group counts for merged markers.
+        // Draw circular badges for grouped markers.
+        shapeRenderer.projectionMatrix = hudStage.camera.combined
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
+        shapeRenderer.color = Color(0f, 0f, 0f, 0.65f)
+        for (marker in edgeMarkers) {
+            if (marker.count <= 1) continue
+
+            val countText = "x${marker.count}"
+            markerCountLayout.setText(markerCountFont, countText)
+            val badgeCenterX = marker.x
+            val badgeCenterY = marker.y - 16f
+            val radius = maxOf(10f, markerCountLayout.width * 0.5f + 6f)
+            shapeRenderer.circle(badgeCenterX, badgeCenterY, radius)
+        }
+        shapeRenderer.end()
+
+        // Draw group counts on top of badges.
         hudStage.batch.projectionMatrix = hudStage.camera.combined
         hudStage.batch.begin()
         for (marker in edgeMarkers) {
@@ -871,7 +1295,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             val countText = "x${marker.count}"
             markerCountLayout.setText(markerCountFont, countText)
             val textX = marker.x - markerCountLayout.width * 0.5f
-            val textY = marker.y - 14f
+            val textY = marker.y - 16f + markerCountLayout.height * 0.35f
             markerCountFont.draw(hudStage.batch, countText, textX, textY)
         }
         hudStage.batch.end()
