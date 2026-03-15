@@ -8,56 +8,53 @@ import com.badlogic.gdx.utils.TimeUtils
 class LaserProjectile(
     val origin: Vector2,
     direction: Vector2,
-    val length: Float = 1000f,  // Largo del láser
-    val duration: Long = 300L,  // Duración en ms
+    val length: Float = 1000f,
+    val duration: Long = 300L,
 ) : Projectile(
     position = origin.cpy(),
     direction = direction.cpy(),
-    speed = 0f, // no se mueve
+    speed = 0f,
     power = 500,
     color = Color.RED,
     size = 2f
 ) {
     private val startTime = TimeUtils.millis()
-    private val hitEnemies = mutableSetOf<Enemy>() // enemigos ya dañados
+    private val hitEnemies = mutableSetOf<Enemy>()
+    private val laserDirection = direction.cpy().apply {
+        if (len2() == 0f) {
+            set(1f, 0f)
+        } else {
+            nor()
+        }
+    }
+    private val endPoint = origin.cpy()
 
     override fun update() {
-        // El láser no se mueve, solo se mide el tiempo de vida
+        // The laser does not move; only its lifetime is tracked.
     }
 
-    fun isExpired(): Boolean {
-        return TimeUtils.timeSinceMillis(startTime) > duration
+    override fun shouldRemove(now: Long): Boolean {
+        return now - startTime > duration
     }
 
     override fun render(shapeRenderer: ShapeRenderer) {
-        val progress = TimeUtils.timeSinceMillis(startTime).toFloat() / duration.toFloat()
-
-        // Grosor pulsante entre 3 y 6 px
+        val progress = (TimeUtils.timeSinceMillis(startTime).toFloat() / duration.toFloat()).coerceAtLeast(0f)
         val thickness = 3f + 3f * kotlin.math.sin(progress * Math.PI * 4).toFloat()
-
         val end = getEndPoint()
 
-        // Glow falso: varias capas
-        val glowColors = listOf(
-            Color(1f, 0f, 0f, 0.2f), // rojo muy transparente
-            Color(1f, 0.5f, 0f, 0.4f), // naranja
-            Color(1f, 1f, 0f, 0.6f)    // amarillo más sólido
-        )
-
         var glowThickness = thickness * 3
-        for (glow in glowColors) {
+        for (glow in GLOW_COLORS) {
             shapeRenderer.color = glow
             shapeRenderer.rectLine(origin, end, glowThickness)
             glowThickness -= 2f
         }
 
-        // Línea central sólida (roja brillante)
         shapeRenderer.color = Color.RED
         shapeRenderer.rectLine(origin, end, thickness)
     }
 
     fun getEndPoint(): Vector2 {
-        return origin.cpy().add(direction.cpy().nor().scl(length))
+        return endPoint.set(origin).mulAdd(laserDirection, length)
     }
 
     fun tryHit(enemy: Enemy) {
@@ -67,4 +64,11 @@ class LaserProjectile(
         }
     }
 
+    private companion object {
+        val GLOW_COLORS = arrayOf(
+            Color(1f, 0f, 0f, 0.2f),
+            Color(1f, 0.5f, 0f, 0.4f),
+            Color(1f, 1f, 0f, 0.6f)
+        )
+    }
 }

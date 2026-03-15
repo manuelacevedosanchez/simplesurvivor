@@ -28,6 +28,7 @@ import es.masmultimedia.entities.Satellite
 import es.masmultimedia.entities.Spaceship
 import es.masmultimedia.entities.Star
 import es.masmultimedia.game.SimpleSurvivorGame
+import es.masmultimedia.utils.Constants
 import es.masmultimedia.utils.GameAssetManager
 import es.masmultimedia.utils.intersectsSegment
 import ktx.math.random
@@ -54,18 +55,18 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
 
     private val powerUps = mutableListOf<PowerUp>()
     private var lastPowerUpSpawnTime = 0L
-    private var powerUpSpawnInterval = 10000L // cada 10 segundos
+    private var powerUpSpawnInterval = 10000L // every 10 seconds
 
     private var lastShotTime = 0L
     private var lastEnemySpawnTime = 0L
-    private var enemySpawnInterval = 5000L // Intervalo inicial de 5 segundos
-    private var lastPlayerDirection = Vector2(1f, 0f) // Dirección por defecto hacia la derecha
+    private var enemySpawnInterval = 5000L // Initial interval: 5 seconds
+    private var lastPlayerDirection = Vector2(1f, 0f) // Default direction: to the right
 
     private lateinit var stage: Stage
     private lateinit var movementTouchpad: Touchpad
     private lateinit var rotationTouchpad: Touchpad
 
-    // Capas de estrellas para parallax
+    // Starfield layers for parallax
     private val starsFar = mutableListOf<Star>()
     private val starsMid = mutableListOf<Star>()
     private val starsNear = mutableListOf<Star>()
@@ -74,6 +75,8 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
 
     private val sectorWidth = 10000f
     private val sectorHeight = 10000f
+
+    private val playerBounds = Rectangle()
 
     override fun show() {
         camera = OrthographicCamera().apply {
@@ -98,8 +101,8 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         val screenWidth = Gdx.graphics.width.toFloat()
         val screenHeight = Gdx.graphics.height.toFloat()
 
-        // Define un porcentaje para el margen
-        val marginPercentage = 0.10f // 5% del tamaño de la pantalla
+        // Define a margin percentage
+        val marginPercentage = 0.10f // 10% of the screen size
         val marginX = screenWidth * marginPercentage
         val marginY = screenHeight * marginPercentage
 
@@ -108,16 +111,16 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             knob = skin.getDrawable("default-round")
         }
 
-        val touchpadSize = screenWidth * 0.10f // 25% del ancho, por ejemplo
+        val touchpadSize = screenWidth * 0.10f // 10% of the width, for example
 
-        // Ejemplo: Touchpad de movimiento, en la esquina inferior izquierda
-        // Lo situamos con un margenX de la izquierda y un marginY de la parte inferior
+        // Example: movement touchpad in the bottom-left corner
+        // Place it with a left margin and a bottom margin
         movementTouchpad = Touchpad(10f, touchpadStyle).apply {
             setBounds(marginX, marginY, touchpadSize, touchpadSize)
         }
 
-        // Ejemplo: Touchpad de rotación, en la esquina inferior derecha
-        // Restamos 200f (ancho del touchpad) más el margen
+        // Example: rotation touchpad in the bottom-right corner
+        // Subtract 200f (touchpad width) plus the margin
         rotationTouchpad = Touchpad(10f, touchpadStyle).apply {
             setBounds(
                 screenWidth - 200f - marginX,
@@ -167,13 +170,13 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         val camX = camera.position.x
         val camY = camera.position.y
 
-        // Dibujar un mosaico 3x3 alrededor de la cámara
-        // Esto significa: la baldosa original y las 8 adyacentes:
+        // Draw a 3x3 tile grid around the camera.
+        // This means: the original tile and the 8 adjacent ones:
         // dx, dy ∈ {-1, 0, 1}
         for (star in layer) {
             for (ix in -1..1) {
                 for (iy in -1..1) {
-                    // Calculamos la posición de la estrella en esta "baldosa" repetida
+                    // Compute the star position in this repeated tile
                     val tileX = star.x + ix * sectorWidth
                     val tileY = star.y + iy * sectorHeight
 
@@ -187,6 +190,10 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
     }
 
     private fun spawnPowerUp() {
+        if (powerUps.size >= Constants.MAX_ACTIVE_POWER_UPS) {
+            return
+        }
+
         val halfWidth = camera.viewportWidth / 2
         val halfHeight = camera.viewportHeight / 2
 
@@ -264,6 +271,9 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             lastPlayerDirection = rotationDirection
         }
 
+        updatePlayerBounds()
+        pruneProjectiles()
+
         if (TimeUtils.timeSinceMillis(lastEnemySpawnTime) > enemySpawnInterval) {
             spawnEnemy()
             lastEnemySpawnTime = TimeUtils.millis()
@@ -272,21 +282,12 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             }
         }
 
-        // Actualizar enemigos
         val enemyIterator = enemies.iterator()
         while (enemyIterator.hasNext()) {
             val enemy = enemyIterator.next()
             enemy.moveTowards(player.position)
 
-            if (enemy.bounds.overlaps(
-                    Rectangle(
-                        player.position.x - player.width / 2,
-                        player.position.y - player.height / 2,
-                        player.width,
-                        player.height
-                    )
-                )
-            ) {
+            if (enemy.bounds.overlaps(playerBounds)) {
                 player.takeDamage(20)
                 enemyIterator.remove()
                 if (!player.isAlive()) {
@@ -300,14 +301,18 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             val projectileIterator = projectiles.iterator()
             while (projectileIterator.hasNext()) {
                 val projectile = projectileIterator.next()
+                if (projectile is LaserProjectile) {
+                    continue
+                }
+
                 if (enemy.bounds.contains(projectile.position)) {
                     enemy.takeDamage(projectile.power)
                     projectileIterator.remove()
                     if (!enemy.isAlive()) {
                         killEnemy(enemy, enemyIterator)
+                        break
                     }
                 }
-
             }
         }
 
@@ -318,11 +323,12 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
                     player.position.cpy(),
                     lastPlayerDirection.cpy()
                 )
-                projectiles.addAll(newProjectiles)
+                addProjectilesRespectingLimit(newProjectiles)
             }
             lastShotTime = TimeUtils.nanoTime()
         }
 
+        val now = TimeUtils.millis()
         val projectileIterator = projectiles.iterator()
         while (projectileIterator.hasNext()) {
             val projectile = projectileIterator.next()
@@ -330,28 +336,27 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
 
             if (projectile is LaserProjectile) {
                 val end = projectile.getEndPoint()
-                // Actualizar enemigos
-                val enemyIterator = enemies.iterator()
+                val laserEnemyIterator = enemies.iterator()
 
-                while (enemyIterator.hasNext()) {
-                    val enemy = enemyIterator.next()
+                while (laserEnemyIterator.hasNext()) {
+                    val enemy = laserEnemyIterator.next()
                     if (enemy.bounds.intersectsSegment(projectile.origin, end)) {
                         projectile.tryHit(enemy)
                         if (!enemy.isAlive()) {
-                            killEnemy(enemy, enemyIterator)
+                            killEnemy(enemy, laserEnemyIterator)
                         }
                     }
                 }
-                if (projectile.isExpired()) {
-                    projectileIterator.remove()
-                }
             }
 
+            if (projectile.shouldRemove(now)) {
+                projectileIterator.remove()
+            }
         }
 
         if (TimeUtils.timeSinceMillis(lastPowerUpSpawnTime) > powerUpSpawnInterval) {
             val chance = Math.random()
-            if (chance < 0.10) { // 10% de probabilidad
+            if (chance < 0.10) {
                 spawnPowerUp()
             }
             lastPowerUpSpawnTime = TimeUtils.millis()
@@ -361,24 +366,21 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             powerUp.update(delta)
         }
 
-        // Aquí actualizo el satélite
         satellite?.update(delta, enemies, projectiles)
 
         val powerUpIterator = powerUps.iterator()
         while (powerUpIterator.hasNext()) {
             val pu = powerUpIterator.next()
             if (pu.overlapsWith(player)) {
-                // El jugador lo recogió
                 powerUpIterator.remove()
                 if (pu.type == PowerUp.Type.SATELLITE) {
-                    satellite = Satellite(player) // creamos el satélite
+                    satellite = Satellite(player)
                 } else {
                     player.applyPowerUp(pu)
                 }
             } else if (pu.isExpired()) {
-                powerUpIterator.remove() // desaparece tras 10s
+                powerUpIterator.remove()
             }
-
         }
 
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
@@ -389,7 +391,6 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
 // ...
         shapeRenderer.end()
 
-        // Primero actualizar las estrellas y dibujarlas
         updateStars(delta)
         shapeRenderer.projectionMatrix = camera.combined
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
@@ -402,11 +403,10 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         for (enemy in enemies) {
             enemy.render(spriteBatch)
         }
-        // Renderizar satellite
         satellite?.render(spriteBatch)
         spriteBatch.end()
 
-        // Dibujar el círculo del escudo si está activo
+        // Draw the shield circle if it is active
         if (player.isShieldActive()) {
             shapeRenderer.projectionMatrix = camera.combined
             shapeRenderer.begin(ShapeRenderer.ShapeType.Line)
@@ -437,7 +437,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         val twinkleSpeed = 3.0f
 
         for (star in layer) {
-            // Parpadeo
+            // Twinkle effect
             star.color.a += star.twinkleDirection * twinkleSpeed * delta
             if (star.color.a > 1f) {
                 star.color.a = 1f
@@ -447,14 +447,14 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
                 star.twinkleDirection = 1
             }
 
-            // Wrap-around global usando modulo
-            // Función auxiliar para hacer wrap-around
+            // Global wrap-around using modulo
+            // Helper function for wrap-around behavior
             star.x = wrap(star.x, sectorWidth)
             star.y = wrap(star.y, sectorHeight)
         }
     }
 
-    // Función wrap auxiliar
+    // Helper wrap function
     private fun wrap(value: Float, max: Float): Float {
         var v = value % max
         if (v < 0) v += max
@@ -503,6 +503,10 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
     }
 
     private fun spawnEnemy() {
+        if (enemies.size >= Constants.MAX_ACTIVE_ENEMIES) {
+            return
+        }
+
         val minSpawnDistance = 500f
         val maxSpawnDistance = 1000f
 
@@ -548,15 +552,13 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         enemiesDefeated++
         score += 100
 
-        // Probabilidad según tipo de enemigo
         val dropChance = when (enemy.type) {
             EnemyType.NORMAL -> 0.9
             EnemyType.FAST -> 0.9
             EnemyType.STRONG -> 0.9
         }
 
-        // Generar power-up soltado por el enemigo con una probabilidad ¡
-        if (Math.random() < dropChance) {
+        if (Math.random() < dropChance && powerUps.size < Constants.MAX_ACTIVE_POWER_UPS) {
             val type = when (enemy.type) {
                 EnemyType.NORMAL -> PowerUp.Type.SATELLITE
                 EnemyType.FAST -> PowerUp.Type.TRIPLE_SHOT
@@ -592,5 +594,41 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
     override fun scrolled(amountX: Float, amountY: Float): Boolean = false
     override fun touchCancelled(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean {
         return false
+    }
+
+    private fun updatePlayerBounds() {
+        playerBounds.set(
+            player.position.x - player.width / 2,
+            player.position.y - player.height / 2,
+            player.width,
+            player.height
+        )
+    }
+
+    private fun pruneProjectiles() {
+        val now = TimeUtils.millis()
+        val projectileIterator = projectiles.iterator()
+        while (projectileIterator.hasNext()) {
+            if (projectileIterator.next().shouldRemove(now)) {
+                projectileIterator.remove()
+            }
+        }
+
+        val overflow = projectiles.size - Constants.MAX_ACTIVE_PROJECTILES
+        if (overflow > 0) {
+            projectiles.subList(0, overflow).clear()
+        }
+    }
+
+    private fun addProjectilesRespectingLimit(newProjectiles: List<Projectile>) {
+        val availableSlots = Constants.MAX_ACTIVE_PROJECTILES - projectiles.size
+        if (availableSlots <= 0) {
+            return
+        }
+
+        val count = minOf(availableSlots, newProjectiles.size)
+        for (index in 0 until count) {
+            projectiles.add(newProjectiles[index])
+        }
     }
 }

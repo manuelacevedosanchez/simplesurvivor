@@ -6,6 +6,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.math.Rectangle
 import com.badlogic.gdx.math.Vector2
 import es.masmultimedia.utils.GameAssetManager
+import kotlin.math.sqrt
 
 open class Enemy(
     open val position: Vector2,
@@ -14,17 +15,26 @@ open class Enemy(
     open val type: EnemyType,
     open val texture: Texture = GameAssetManager.getTexture("enemy_base.png"),
 ) {
+    private val boundsRect = Rectangle()
+
     open val bounds: Rectangle
-        get() = Rectangle(position.x, position.y, texture.width.toFloat(), texture.height.toFloat())
+        get() = boundsRect.set(position.x, position.y, texture.width.toFloat(), texture.height.toFloat())
 
     open fun moveTowards(target: Vector2) {
-        val direction = Vector2(target.x - position.x, target.y - position.y).nor()
-        position.add(direction.scl(speed * Gdx.graphics.deltaTime))
+        val dx = target.x - position.x
+        val dy = target.y - position.y
+        val distanceSquared = dx * dx + dy * dy
+        if (distanceSquared == 0f) {
+            return
+        }
+
+        val scale = speed * Gdx.graphics.deltaTime / sqrt(distanceSquared)
+        position.x += dx * scale
+        position.y += dy * scale
     }
 
     open fun takeDamage(damage: Int) {
         health -= damage
-        Gdx.app.log(this::class.simpleName, "Took $damage damage, health is now $health")
     }
 
     open fun isAlive(): Boolean = health > 0
