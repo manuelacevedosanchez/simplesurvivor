@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+  <!-- Spaceship body (center fuselage) -->
+  <path
+      android:fillColor="#FFFFFF"
+      android:pathData="
+        M54,18
+        C54,18 44,34 42,50
+        L42,68
+        C42,68 46,72 54,72
+        C62,72 66,68 66,68
+        L66,50
+        C64,34 54,18 54,18
+        Z" />
+
+  <!-- Left wing -->
+  <path
+      android:fillColor="#FFFFFF"
+      android:pathData="
+        M42,52
+        L28,68
+        L36,68
+        L42,62
+        Z" />
+
+  <!-- Right wing -->
+  <path
+      android:fillColor="#FFFFFF"
+      android:pathData="
+        M66,52
+        L80,68
+        L72,68
+        L66,62
+        Z" />
+
+  <!-- Engine glow (bottom) -->
+  <path
+      android:fillColor="#FF6D00"
+      android:pathData="
+        M48,68
+        L50,82
+        L54,86
+        L58,82
+        L60,68
+        Z" />
+
+  <!-- Cockpit window -->
+  <path
+      android:fillColor="#FF6D00"
+      android:pathData="
+        M54,28
+        C51,28 49,31 49,34
+        C49,37 51,40 54,40
+        C57,40 59,37 59,34
+        C59,31 57,28 54,28
+        Z" />
+
+</vector>
