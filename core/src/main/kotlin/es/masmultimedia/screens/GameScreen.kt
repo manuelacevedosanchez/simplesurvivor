@@ -8,15 +8,23 @@ import com.badlogic.gdx.Screen
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.GL20
 import com.badlogic.gdx.graphics.OrthographicCamera
+import com.badlogic.gdx.graphics.g2d.BitmapFont
+import com.badlogic.gdx.graphics.g2d.GlyphLayout
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
+import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer
 import com.badlogic.gdx.math.Rectangle
 import com.badlogic.gdx.math.Vector2
+import com.badlogic.gdx.math.Vector3
 import com.badlogic.gdx.scenes.scene2d.Stage
 import com.badlogic.gdx.scenes.scene2d.ui.Dialog
+import com.badlogic.gdx.scenes.scene2d.ui.Label
 import com.badlogic.gdx.scenes.scene2d.ui.Skin
+import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.badlogic.gdx.scenes.scene2d.ui.Touchpad
+import com.badlogic.gdx.utils.Align
 import com.badlogic.gdx.utils.TimeUtils
+import com.badlogic.gdx.utils.viewport.ScreenViewport
 import es.masmultimedia.entities.Enemy
 import es.masmultimedia.entities.EnemyFactory
 import es.masmultimedia.entities.EnemyType
@@ -31,9 +39,12 @@ import es.masmultimedia.game.SimpleSurvivorGame
 import es.masmultimedia.utils.Constants
 import es.masmultimedia.utils.GameAssetManager
 import es.masmultimedia.utils.intersectsSegment
+import java.util.Locale
 import ktx.math.random
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor {
     private lateinit var camera: OrthographicCamera
@@ -45,6 +56,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
     private var gameStartTime = 0L
     private var gameEnded = false
     private var gameWon = false
+    private var gameEndMessage = "¡Juego Terminado!"
     private var enemiesDefeated = 0
     private var score = 0
     private var isPaused = false
@@ -77,6 +89,26 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
     private val sectorHeight = 10000f
 
     private val playerBounds = Rectangle()
+
+    // HUD
+    private lateinit var hudStage: Stage
+    private lateinit var hudFont: BitmapFont
+    private lateinit var labelScore: Label
+    private lateinit var labelTime: Label
+    private lateinit var labelKills: Label
+    private lateinit var markerCountFont: BitmapFont
+
+    // HUD caches and reusable vectors to avoid per-frame allocations.
+    private var hudScoreText = ""
+    private var hudKillsText = ""
+    private val projectedEnemyPos = Vector3()
+    private val edgeMarkers = mutableListOf<EdgeMarker>()
+    private val markerMergeDistanceSquared = 30f * 30f
+    private val markerCountLayout = GlyphLayout()
+
+    private val markerColorNormal = Color(1f, 0.35f, 0.25f, 0.9f)
+    private val markerColorFast = Color(1f, 0.85f, 0.25f, 0.95f)
+    private val markerColorStrong = Color(0.95f, 0.25f, 0.95f, 1f)
 
     override fun show() {
         camera = OrthographicCamera().apply {
@@ -136,7 +168,58 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         val inputMultiplexer = InputMultiplexer(this, stage)
         Gdx.input.inputProcessor = inputMultiplexer
 
+        setupHud()
         generateStars()
+    }
+
+    private fun setupHud() {
+        hudStage = Stage(ScreenViewport())
+
+        val generator = FreeTypeFontGenerator(Gdx.files.internal("wheaton_capitals.otf"))
+        val params = FreeTypeFontGenerator.FreeTypeFontParameter().apply {
+            size = (Gdx.graphics.height * 0.045f).toInt().coerceAtLeast(14)
+            color = Color.WHITE
+            shadowColor = Color(0f, 0f, 0f, 0.6f)
+            shadowOffsetX = 2
+            shadowOffsetY = -2
+        }
+        hudFont = generator.generateFont(params)
+
+        val markerParams = FreeTypeFontGenerator.FreeTypeFontParameter().apply {
+            size = (Gdx.graphics.height * 0.028f).toInt().coerceAtLeast(12)
+            color = Color.WHITE
+            shadowColor = Color(0f, 0f, 0f, 0.75f)
+            shadowOffsetX = 1
+            shadowOffsetY = -1
+        }
+        markerCountFont = generator.generateFont(markerParams)
+        generator.dispose()
+
+        val labelStyle = Label.LabelStyle(hudFont, Color.WHITE)
+
+        labelKills = Label("Kills: 0", labelStyle)
+        labelTime  = Label("0:00", labelStyle)
+        labelScore = Label("Score: 0", labelStyle)
+        labelScore.setAlignment(Align.right)
+
+        hudScoreText = "Score: ${formatCompactNumber(score)}"
+        hudKillsText = "Kills: ${formatCompactNumber(enemiesDefeated)}"
+        labelScore.setText(hudScoreText)
+        labelKills.setText(hudKillsText)
+
+        val pad = Gdx.graphics.width * 0.025f
+        val sideMinWidth = Gdx.graphics.width * 0.30f
+
+        val table = Table().apply {
+            setFillParent(true)
+            top()
+            pad(pad)
+            add(labelKills).minWidth(sideMinWidth).expandX().left()
+            add(labelTime).expandX().center()
+            add(labelScore).minWidth(sideMinWidth).expandX().right()
+        }
+
+        hudStage.addActor(table)
     }
 
     private fun generateStars() {
@@ -226,7 +309,8 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
                 game,
                 score,
                 enemiesDefeated,
-                TimeUtils.timeSinceMillis(gameStartTime)
+                TimeUtils.timeSinceMillis(gameStartTime),
+                gameEndMessage
             )
             dispose()
             return
@@ -242,12 +326,6 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
 
         Gdx.gl.glClearColor(0f, 0f, 0f, 1f)
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
-
-        if (TimeUtils.timeSinceMillis(gameStartTime) > 120000) {
-            gameEnded = true
-            gameWon = true
-            return
-        }
 
         camera.position.set(player.position.x, player.position.y, 0f)
         camera.update()
@@ -274,11 +352,14 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         updatePlayerBounds()
         pruneProjectiles()
 
-        if (TimeUtils.timeSinceMillis(lastEnemySpawnTime) > enemySpawnInterval) {
-            spawnEnemy()
-            lastEnemySpawnTime = TimeUtils.millis()
-            if (enemySpawnInterval > 1000L) {
-                enemySpawnInterval -= 100L
+        val effectiveEnemySpawnInterval = getEffectiveEnemySpawnInterval()
+        if (TimeUtils.timeSinceMillis(lastEnemySpawnTime) > effectiveEnemySpawnInterval) {
+            val spawned = spawnEnemy()
+            if (spawned) {
+                lastEnemySpawnTime = TimeUtils.millis()
+                if (enemySpawnInterval > 1000L) {
+                    enemySpawnInterval -= 100L
+                }
             }
         }
 
@@ -293,6 +374,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
                 if (!player.isAlive()) {
                     gameEnded = true
                     gameWon = false
+                    gameEndMessage = "¡Juego Terminado!"
                     return
                 }
                 continue
@@ -425,6 +507,30 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
 
         stage.act(delta)
         stage.draw()
+
+        drawEnemyEdgeIndicators()
+
+        // Update and draw HUD on top
+        val elapsedMs = TimeUtils.timeSinceMillis(gameStartTime)
+        val elapsedSeconds = elapsedMs / 1000L
+        val minutes = elapsedSeconds / 60
+        val seconds = elapsedSeconds % 60
+        labelTime.setText("%d:%02d".format(minutes, seconds))
+
+        val nextScoreText = "Score: ${formatCompactNumber(score)}"
+        if (nextScoreText != hudScoreText) {
+            hudScoreText = nextScoreText
+            labelScore.setText(hudScoreText)
+        }
+
+        val nextKillsText = "Kills: ${formatCompactNumber(enemiesDefeated)}"
+        if (nextKillsText != hudKillsText) {
+            hudKillsText = nextKillsText
+            labelKills.setText(hudKillsText)
+        }
+
+        hudStage.act(delta)
+        hudStage.draw()
     }
 
     private fun updateStars(delta: Float) {
@@ -502,9 +608,9 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         shapeRenderer.rect(barX, barY, barWidth * healthPercentage, barHeight)
     }
 
-    private fun spawnEnemy() {
+    private fun spawnEnemy(): Boolean {
         if (enemies.size >= Constants.MAX_ACTIVE_ENEMIES) {
-            return
+            return false
         }
 
         val minSpawnDistance = 500f
@@ -520,10 +626,23 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         val enemyType = getRandomEnemyType()
         val newEnemy = EnemyFactory.createEnemy(enemyType, Vector2(spawnX, spawnY))
         enemies.add(newEnemy)
+        return true
+    }
+
+    private fun getEffectiveEnemySpawnInterval(): Long {
+        val occupancy = enemies.size.toFloat() / Constants.MAX_ACTIVE_ENEMIES.toFloat()
+        val multiplier = when {
+            occupancy >= 0.95f -> 4.0f
+            occupancy >= 0.85f -> 2.6f
+            occupancy >= 0.70f -> 1.6f
+            else -> 1.0f
+        }
+        return (enemySpawnInterval * multiplier).toLong().coerceAtLeast(enemySpawnInterval)
     }
 
     override fun resize(width: Int, height: Int) {
         stage.viewport.update(width, height, true)
+        hudStage.viewport.update(width, height, true)
     }
 
     override fun pause() {}
@@ -534,6 +653,9 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         spriteBatch.dispose()
         shapeRenderer.dispose()
         stage.dispose()
+        hudStage.dispose()
+        hudFont.dispose()
+        markerCountFont.dispose()
     }
 
     override fun keyDown(keycode: Int): Boolean {
@@ -549,8 +671,25 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
 
     private fun killEnemy(enemy: Enemy, enemyIterator: MutableIterator<Enemy>) {
         enemyIterator.remove()
+
+        val enemyScore = when (enemy.type) {
+            EnemyType.NORMAL -> Constants.SCORE_ENEMY_NORMAL
+            EnemyType.FAST -> Constants.SCORE_ENEMY_FAST
+            EnemyType.STRONG -> Constants.SCORE_ENEMY_STRONG
+        }
+
+        val scoreWillOverflow = score > Int.MAX_VALUE - enemyScore
+        val killsWillOverflow = enemiesDefeated == Int.MAX_VALUE
+        if (scoreWillOverflow || killsWillOverflow) {
+            score = Int.MAX_VALUE
+            enemiesDefeated = Int.MAX_VALUE
+            gameEnded = true
+            gameEndMessage = "HAS MATADO EL NUMERO MAXIMO DE ENEMIGOS"
+            return
+        }
+
         enemiesDefeated++
-        score += 100
+        score += enemyScore
 
         val dropChance = when (enemy.type) {
             EnemyType.NORMAL -> 0.9
@@ -631,4 +770,153 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             projectiles.add(newProjectiles[index])
         }
     }
+
+    private fun formatCompactNumber(value: Int): String {
+        val absValue = abs(value.toLong())
+        val sign = if (value < 0) "-" else ""
+
+        if (absValue >= 1_000_000_000L) {
+            val formatted = String.format(Locale.US, "%.1f", absValue / 1_000_000_000.0).removeSuffix(".0")
+            return "$sign${formatted}B"
+        }
+        if (absValue >= 1_000_000L) {
+            val formatted = String.format(Locale.US, "%.1f", absValue / 1_000_000.0).removeSuffix(".0")
+            return "$sign${formatted}M"
+        }
+        if (absValue >= 1_000L) {
+            val formatted = String.format(Locale.US, "%.1f", absValue / 1_000.0).removeSuffix(".0")
+            return "$sign${formatted}K"
+        }
+        return "$sign$absValue"
+    }
+
+    private fun drawEnemyEdgeIndicators() {
+        if (enemies.isEmpty()) return
+
+        val camX = camera.position.x
+        val camY = camera.position.y
+        val halfWidth = camera.viewportWidth * 0.5f
+        val halfHeight = camera.viewportHeight * 0.5f
+
+        val hudWidth = hudStage.viewport.worldWidth
+        val hudHeight = hudStage.viewport.worldHeight
+        val margin = 24f
+        val topReserved = hudHeight * 0.12f
+        val centerX = hudWidth * 0.5f
+        val centerY = hudHeight * 0.5f
+
+        edgeMarkers.clear()
+
+        for (enemy in enemies) {
+            val dx = enemy.position.x - camX
+            val dy = enemy.position.y - camY
+
+            // Skip enemies already visible in camera bounds.
+            if (abs(dx) <= halfWidth && abs(dy) <= halfHeight) continue
+
+            val tx = if (dx != 0f) halfWidth / abs(dx) else Float.POSITIVE_INFINITY
+            val ty = if (dy != 0f) halfHeight / abs(dy) else Float.POSITIVE_INFINITY
+            val t = minOf(tx, ty)
+            if (!t.isFinite()) continue
+
+            projectedEnemyPos.set(camX + dx * t, camY + dy * t, 0f)
+            camera.project(projectedEnemyPos)
+
+            val markerX = projectedEnemyPos.x.coerceIn(margin, hudWidth - margin)
+            val markerY = projectedEnemyPos.y.coerceIn(margin, hudHeight - topReserved)
+
+            var merged = false
+            for (marker in edgeMarkers) {
+                val mx = marker.x - markerX
+                val my = marker.y - markerY
+                if (mx * mx + my * my <= markerMergeDistanceSquared) {
+                    val total = marker.count + 1
+                    marker.x = (marker.x * marker.count + markerX) / total
+                    marker.y = (marker.y * marker.count + markerY) / total
+                    marker.count = total
+                    if (enemyTypePriority(enemy.type) > enemyTypePriority(marker.enemyType)) {
+                        marker.enemyType = enemy.type
+                    }
+                    merged = true
+                    break
+                }
+            }
+
+            if (!merged) {
+                edgeMarkers.add(EdgeMarker(markerX, markerY, enemy.type, 1))
+            }
+        }
+
+        shapeRenderer.projectionMatrix = hudStage.camera.combined
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
+
+        for (marker in edgeMarkers) {
+            shapeRenderer.color = when (marker.enemyType) {
+                EnemyType.NORMAL -> markerColorNormal
+                EnemyType.FAST -> markerColorFast
+                EnemyType.STRONG -> markerColorStrong
+            }
+            val size = 10f + minOf(8f, (marker.count - 1) * 1.5f)
+            drawIndicatorTriangle(marker.x, marker.y, centerX, centerY, size)
+        }
+
+        shapeRenderer.end()
+
+        // Draw group counts for merged markers.
+        hudStage.batch.projectionMatrix = hudStage.camera.combined
+        hudStage.batch.begin()
+        for (marker in edgeMarkers) {
+            if (marker.count <= 1) continue
+
+            val countText = "x${marker.count}"
+            markerCountLayout.setText(markerCountFont, countText)
+            val textX = marker.x - markerCountLayout.width * 0.5f
+            val textY = marker.y - 14f
+            markerCountFont.draw(hudStage.batch, countText, textX, textY)
+        }
+        hudStage.batch.end()
+    }
+
+    private fun enemyTypePriority(type: EnemyType): Int {
+        return when (type) {
+            EnemyType.NORMAL -> 1
+            EnemyType.FAST -> 2
+            EnemyType.STRONG -> 3
+        }
+    }
+
+    private fun drawIndicatorTriangle(markerX: Float, markerY: Float, centerX: Float, centerY: Float, size: Float) {
+        val dx = markerX - centerX
+        val dy = markerY - centerY
+        val lengthSquared = dx * dx + dy * dy
+        if (lengthSquared < 0.0001f) return
+
+        val invLength = 1f / sqrt(lengthSquared)
+        val dirX = dx * invLength
+        val dirY = dy * invLength
+        val perpX = -dirY
+        val perpY = dirX
+
+        val baseDistance = size * 1.8f
+        val halfWidth = size * 0.9f
+
+        val tipX = markerX
+        val tipY = markerY
+        val baseX = tipX - dirX * baseDistance
+        val baseY = tipY - dirY * baseDistance
+
+        val leftX = baseX + perpX * halfWidth
+        val leftY = baseY + perpY * halfWidth
+        val rightX = baseX - perpX * halfWidth
+        val rightY = baseY - perpY * halfWidth
+
+        shapeRenderer.triangle(tipX, tipY, leftX, leftY, rightX, rightY)
+    }
+
+    private data class EdgeMarker(
+        var x: Float,
+        var y: Float,
+        var enemyType: EnemyType,
+        var count: Int
+    )
 }
