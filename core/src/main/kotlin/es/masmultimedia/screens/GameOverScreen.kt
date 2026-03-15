@@ -6,7 +6,6 @@ import com.badlogic.gdx.InputMultiplexer
 import com.badlogic.gdx.InputProcessor
 import com.badlogic.gdx.Screen
 import com.badlogic.gdx.graphics.GL20
-import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.scenes.scene2d.InputEvent
 import com.badlogic.gdx.scenes.scene2d.Stage
 import com.badlogic.gdx.scenes.scene2d.ui.Dialog
@@ -24,34 +23,34 @@ class GameOverScreen(
     private val game: SimpleSurvivorGame,
     private val score: Int,
     private val enemiesDefeated: Int,
-    private val timePlayed: Long // Tiempo en milisegundos
+    private val timePlayed: Long, // Time played in milliseconds
+    private val endMessage: String = "¡Juego Terminado!"
 ) : Screen, InputProcessor {
 
     private val stage = Stage(ScreenViewport())
-    private lateinit var backgroundTexture: Texture
     private val highScoreManager = HighScoreManager()
 
     override fun show() {
         val skin = Skin(Gdx.files.internal("uiskin.json"))
 
-        // Crear una tabla para organizar los widgets
+        // Build a table layout for the widgets.
         val table = Table()
         table.setFillParent(true)
         table.center()
 
-        // Título de "¡Has perdido!" o "¡Has ganado!" dependiendo del resultado
-        val titleLabel = Label("¡Juego Terminado!", skin)
+        // End title (loss/win/custom message).
+        val titleLabel = Label(endMessage, skin)
         titleLabel.setFontScale(2f)
 
-        // Mostrar la puntuación y estadísticas
+        // Display score and run stats.
         val scoreLabel = Label("Puntuación: $score", skin)
         val enemiesLabel = Label("Enemigos eliminados: $enemiesDefeated", skin)
         val timeLabel = Label("Tiempo jugado: ${timePlayed / 1000} segundos", skin)
 
-        // Verificar si la puntuación es una puntuación alta
+        // Check whether this score qualifies as a high score.
         val isHighScore = checkIfHighScore(score)
 
-        // Campos para introducir el nombre si es una puntuación alta
+        // Name input shown only for high-score entries.
         val nameLabel = Label("Introduce tu nombre:", skin)
         val nameTextField = TextField("", skin)
         val saveButton = TextButton("Guardar Puntuación", skin)
@@ -66,11 +65,11 @@ class GameOverScreen(
             }
         })
 
-        // Crear botones
+        // Create action buttons.
         val retryButton = TextButton("Volver a jugar", skin)
         val menuButton = TextButton("Menú principal", skin)
 
-        // Añadir listeners a los botones
+        // Attach button listeners.
         retryButton.addListener(object : ClickListener() {
             override fun clicked(event: InputEvent?, x: Float, y: Float) {
                 game.screen = GameScreen(game)
@@ -85,7 +84,7 @@ class GameOverScreen(
             }
         })
 
-        // Añadir widgets a la tabla
+        // Add widgets to the table.
         table.add(titleLabel).padBottom(40f).row()
         table.add(scoreLabel).padBottom(20f).row()
         table.add(enemiesLabel).padBottom(20f).row()
@@ -100,10 +99,10 @@ class GameOverScreen(
         table.add(retryButton).width(200f).height(50f).padBottom(20f).row()
         table.add(menuButton).width(200f).height(50f)
 
-        // Añadir la tabla al stage
+        // Add table to stage.
         stage.addActor(table)
 
-        // Crear el InputMultiplexer
+        // Route inputs to both this screen and the stage.
         val inputMultiplexer = InputMultiplexer(this, stage)
         Gdx.input.inputProcessor = inputMultiplexer
     }
@@ -128,7 +127,7 @@ class GameOverScreen(
         Gdx.gl.glClearColor(0f, 0f, 0f, 1f)
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
 
-        // Dibujar la interfaz
+        // Draw UI.
         stage.act(delta)
         stage.draw()
     }
@@ -146,12 +145,12 @@ class GameOverScreen(
 
     override fun keyDown(keycode: Int): Boolean {
         if (keycode == Input.Keys.BACK || keycode == Input.Keys.ESCAPE) {
-            // Regresar al menú principal
+            // Return to the main menu.
             game.screen = MainMenuScreen(game)
             dispose()
-            return true // Indica que el evento ha sido manejado
+            return true // Event handled.
         }
-        return false // Permite que el evento pase al siguiente InputProcessor si es necesario
+        return false // Let other processors handle it if needed.
     }
 
     override fun keyUp(keycode: Int): Boolean = false
