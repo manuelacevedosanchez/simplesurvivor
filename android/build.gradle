@@ -1,4 +1,3 @@
-
 buildscript {
   repositories {
     mavenCentral()
@@ -11,6 +10,11 @@ apply plugin: 'kotlin-android'
 android {
   namespace "es.masmultimedia"
   compileSdk 34
+
+  buildFeatures {
+    buildConfig true
+  }
+
   sourceSets {
     main {
       manifest.srcFile 'AndroidManifest.xml'
@@ -44,14 +48,35 @@ android {
     coreLibraryDesugaringEnabled true
   }
   buildTypes {
+    debug {
+      applicationIdSuffix '.debug'
+      versionNameSuffix '-debug'
+      debuggable true
+      minifyEnabled false
+      buildConfigField 'boolean', 'IS_PRO_BUILD', 'false'
+    }
+
+    pro {
+      initWith release
+      matchingFallbacks = ['release']
+      debuggable false
+      minifyEnabled true
+      shrinkResources true
+      buildConfigField 'boolean', 'IS_PRO_BUILD', 'true'
+      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+      signingConfig signingConfigs.debug
+    }
+
     release {
       minifyEnabled true
-      proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+      shrinkResources true
+      debuggable false
+      buildConfigField 'boolean', 'IS_PRO_BUILD', 'true'
+      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
     }
   }
 
   kotlin.compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8)
-  
 }
 
 repositories {
@@ -118,7 +143,29 @@ tasks.matching { it.name.contains("merge") && it.name.contains("JniLibFolders") 
   packageTask.dependsOn 'copyAndroidNatives'
 }
 
-tasks.register('run', Exec) {
+tasks.register('runDebug', Exec) {
+  def path
+  def localProperties = project.file("../local.properties")
+  if (localProperties.exists()) {
+    Properties properties = new Properties()
+    localProperties.withInputStream { instr ->
+      properties.load(instr)
+    }
+    def sdkDir = properties.getProperty('sdk.dir')
+    if (sdkDir) {
+      path = sdkDir
+    } else {
+      path = "$System.env.ANDROID_SDK_ROOT"
+    }
+  } else {
+    path = "$System.env.ANDROID_SDK_ROOT"
+  }
+
+  def adb = path + "/platform-tools/adb"
+  commandLine "$adb", 'shell', 'am', 'start', '-n', 'es.masmultimedia.debug/es.masmultimedia.android.AndroidLauncher'
+}
+
+tasks.register('runPro', Exec) {
   def path
   def localProperties = project.file("../local.properties")
   if (localProperties.exists()) {
@@ -138,6 +185,10 @@ tasks.register('run', Exec) {
 
   def adb = path + "/platform-tools/adb"
   commandLine "$adb", 'shell', 'am', 'start', '-n', 'es.masmultimedia/es.masmultimedia.android.AndroidLauncher'
+}
+
+tasks.register('run') {
+  dependsOn 'runDebug'
 }
 
 eclipse.project.name = appName + "-android"

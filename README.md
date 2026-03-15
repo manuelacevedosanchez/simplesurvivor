@@ -30,3 +30,35 @@ Useful Gradle tasks and flags:
 
 Note that most tasks that are not specific to a single project can be run with `name:` prefix, where the `name` should be replaced with the ID of a specific project.
 For example, `core:clean` removes `build` folder only from the `core` project.
+
+## Android Variants (`debug` and `pro`)
+
+The `android` module now defines two main build variants you can work with:
+
+- `debug`: internal testing build (`applicationId` becomes `es.masmultimedia.debug`, no minify, debuggable, app name `SimpleSurvivor Debug`, orange adaptive launcher icon).
+- `pro`: production-oriented build (`applicationId` stays `es.masmultimedia`, minify + resource shrink enabled, app name `SimpleSurvivor Pro`, blue/gold adaptive launcher icon).
+
+### In Android Studio
+
+1. Open **Build Variants** tool window.
+2. For module `android`, choose `debug` while developing.
+3. Switch to `pro` before generating release-ready artifacts.
+
+### Gradle Commands
+
+```bash
+./gradlew :android:assembleDebug
+./gradlew :android:installDebug
+./gradlew :android:runDebug
+
+./gradlew :android:assemblePro
+./gradlew :android:installPro
+./gradlew :android:runPro
+```
+
+### Notes
+
+- `debug` and `pro` can coexist on the same device because `debug` uses a different package suffix.
+- `debug` and `pro` also have separate launcher names and icons, so they are easy to distinguish on-device.
+- `release` still exists for compatibility, but the recommended production path is `pro`.
+- You can check the active mode from `BuildConfig.IS_PRO_BUILD` if you need runtime switches.
