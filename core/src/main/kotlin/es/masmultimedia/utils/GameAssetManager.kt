@@ -32,65 +32,65 @@ object GameAssetManager {
      * - Resources loaded with the `AssetManager` should be disposed of at the end of the game by calling the `dispose()` method of this class.
      */
     fun loadAssets() {
-        // Lista de recursos a cargar
+        // List of assets to load
         val texturesToLoad = listOf(
-            // Texturas de naves espaciales (Spaceships)
+            // Spaceship textures
             "spaceship_base.png",
             "fast_spaceship.png",
             "strong_spaceship.png",
 
-            // Texturas de enemigos (Enemies)
+            // Enemy textures
             "enemy_base.png",
             "enemy_normal.png",
             "fast_enemy.png",
             "strong_enemy.png",
 
-            // Texturas de UI y fondos
+            // UI and background textures
             "menu_background.png",
             "logo.png",
 
-            // Otras texturas utilizadas en el juego
+            // Other textures used in the game
             "satellite.png",
 
-            // Añadir aquí cualquier otra textura que se utilice
+            // Add any other textures here
         )
 
-        // Cargar texturas verificando si existen
+        // Load textures checking if they exist
         for (texturePath in texturesToLoad) {
             if (Gdx.files.internal(texturePath).exists()) {
                 manager.load(texturePath, Texture::class.java)
             } else {
-                Gdx.app.log("GameAssetManager", "El archivo $texturePath no existe. No se cargará.")
+                Gdx.app.log("GameAssetManager", "File $texturePath does not exist. Not loading.")
             }
         }
 
-        // Esperar a que se carguen todos los assets
+        // Wait for all assets to load
         manager.finishLoading()
     }
 
     fun getTexture(path: String): Texture {
-        // Si ya está cargada, la devolvemos
+        // If already loaded, return it
         if (manager.isLoaded(path, Texture::class.java)) {
             return manager.get(path, Texture::class.java)
         }
 
-        // Si no está cargada, intentamos cargarla en caliente
+        // If not loaded, try to load it on demand
         if (Gdx.files.internal(path).exists()) {
-            Gdx.app.log("GameAssetManager", "Cargando textura en caliente: $path")
+            Gdx.app.log("GameAssetManager", "Loading texture on demand: $path")
             manager.load(path, Texture::class.java)
-            manager.finishLoadingAsset<Texture>(path) // Espera sólo a ese asset
+            manager.finishLoadingAsset<Texture>(path) // Wait only for this asset
             return manager.get(path, Texture::class.java)
         }
 
-        // Si tampoco existe en assets, devolvemos la textura por defecto
-        Gdx.app.log("GameAssetManager", "La textura $path no existe. Usando textura por defecto.")
+        // If it doesn't exist in assets, return default texture
+        Gdx.app.log("GameAssetManager", "Texture $path does not exist. Using default texture.")
         return getDefaultTexture()
     }
 
     fun getDefaultTexture(): Texture {
-        // Puedes cargar una textura por defecto o crear una textura en blanco
+        // Load a default texture or create a blank one
         if (!manager.isLoaded("default.png", Texture::class.java)) {
-            // Verificar si existe la textura por defecto
+            // Check if default texture exists
             if (Gdx.files.internal("default.png").exists()) {
                 manager.load("default.png", Texture::class.java)
                 manager.finishLoadingAsset("default.png")

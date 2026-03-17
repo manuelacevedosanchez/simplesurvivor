@@ -88,11 +88,11 @@ class MainMenuScreen(private val game: SimpleSurvivorGame) : Screen, InputProces
             }
         })
 
-        // Calcular tamaños relativos para los botones
-        val buttonWidth = screenWidth * 0.2f // 60% del ancho de la pantalla
-        val buttonHeight = screenHeight * 0.1f // 10% del alto de la pantalla
+        // Calculate relative sizes for buttons
+        val buttonWidth = screenWidth * 0.2f // 60% of screen width
+        val buttonHeight = screenHeight * 0.1f // 10% of screen height
 
-        // Añadir los widgets a la tabla
+        // Add widgets to table
         table.add(titleLabel).padBottom(screenHeight * 0.05f)
         table.row()
         table.add(playButton).width(buttonWidth).height(buttonHeight)
@@ -109,16 +109,16 @@ class MainMenuScreen(private val game: SimpleSurvivorGame) : Screen, InputProces
         table.row()
         table.add(exitButton).width(buttonWidth).height(buttonHeight).fillX().uniformX()
 
-        // Añadir la tabla al stage
+        // Add table to stage
         stage.addActor(table)
 
-        // Crear el InputMultiplexer
+        // Create InputMultiplexer
         val inputMultiplexer = InputMultiplexer(this, stage)
         Gdx.input.inputProcessor = inputMultiplexer
     }
 
     override fun render(delta: Float) {
-        // Dibujar el fondo
+        // Draw background
         Gdx.gl.glClearColor(0f, 0f, 0f, 1f)
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
 

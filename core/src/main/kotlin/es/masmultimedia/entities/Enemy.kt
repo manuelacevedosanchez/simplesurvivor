@@ -20,7 +20,7 @@ open class Enemy(
     open val bounds: Rectangle
         get() = boundsRect.set(position.x, position.y, texture.width.toFloat(), texture.height.toFloat())
 
-    open fun moveTowards(target: Vector2) {
+    open fun moveTowards(target: Vector2, speedFactor: Float = 1f) {
         val dx = target.x - position.x
         val dy = target.y - position.y
         val distanceSquared = dx * dx + dy * dy
@@ -28,7 +28,7 @@ open class Enemy(
             return
         }
 
-        val scale = speed * Gdx.graphics.deltaTime / sqrt(distanceSquared)
+        val scale = speed * speedFactor * Gdx.graphics.deltaTime / sqrt(distanceSquared)
         position.x += dx * scale
         position.y += dy * scale
     }

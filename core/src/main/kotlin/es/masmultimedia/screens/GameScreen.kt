@@ -28,6 +28,7 @@ import com.badlogic.gdx.utils.viewport.ScreenViewport
 import es.masmultimedia.entities.Enemy
 import es.masmultimedia.entities.EnemyFactory
 import es.masmultimedia.entities.EnemyType
+import es.masmultimedia.entities.Drone
 import es.masmultimedia.entities.LaserProjectile
 import es.masmultimedia.entities.PowerUp
 import es.masmultimedia.entities.Projectile
@@ -108,6 +109,8 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
     private val starsNear = mutableListOf<Star>()
 
     private var satellite: Satellite? = null
+    private val drones = mutableListOf<Drone>()
+    private val maxDrones = 4 // Maximum allowed drones
 
     private val sectorWidth = 10000f
     private val sectorHeight = 10000f
@@ -127,6 +130,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
     private lateinit var labelStatFireRate: Label
     private lateinit var labelStatDmgReduc: Label
     private lateinit var labelStatWeapon: Label
+    private lateinit var labelActivePowerUps: Label
     private lateinit var markerCountFont: BitmapFont
 
     // HUD caches and reusable vectors to avoid per-frame allocations.
@@ -264,6 +268,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         labelStatFireRate = Label("500 ms", statsValueStyle)
         labelStatDmgReduc = Label("-0%", statsValueStyle)
         labelStatWeapon = Label("BASIC", statsValueStyle)
+        labelActivePowerUps = Label("-", statsValueStyle)
 
         // Stats sub-table – two columns: label name | value
         val statsTable = Table()
@@ -276,6 +281,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         statRow("Fire:", labelStatFireRate)
         statRow("Armor:", labelStatDmgReduc)
         statRow("Weapon:", labelStatWeapon)
+        statRow("Active:", labelActivePowerUps)
 
         val pad = Gdx.graphics.width * 0.025f
         val sideMinWidth = Gdx.graphics.width * 0.30f
@@ -373,15 +379,8 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         val spawnX = (minX..maxX).random()
         val spawnY = (minY..maxY).random()
 
-        val type = PowerUp.Type.entries.random()
-        val color = when (type) {
-            PowerUp.Type.HEALTH -> Color.GREEN
-            PowerUp.Type.TRIPLE_SHOT -> Color.RED
-            PowerUp.Type.SHIELD -> Color.CYAN
-            PowerUp.Type.CHARGED_SHOT -> Color.YELLOW
-            PowerUp.Type.LASER -> Color.BLUE
-            PowerUp.Type.SATELLITE -> Color.WHITE
-        }
+        val type = selectRandomPowerUpByRarity()
+        val color = PowerUp.getColor(type)
 
         powerUps.add(PowerUp(Vector2(spawnX, spawnY), radius = 10f, color = color, type = type))
     }
@@ -457,9 +456,10 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         }
 
         val enemyIterator = enemies.iterator()
+        val timeSlowFactor = player.getTimeSlowFactor()
         while (enemyIterator.hasNext()) {
             val enemy = enemyIterator.next()
-            enemy.moveTowards(player.position)
+            enemy.moveTowards(player.position, timeSlowFactor)
 
             if (enemy.bounds.overlaps(playerBounds)) {
                 val contactDamage = (20f * damageTakenMultiplier).toInt().coerceAtLeast(1)
@@ -483,7 +483,10 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
 
                 if (enemy.bounds.contains(projectile.position)) {
                     enemy.takeDamage(projectile.power)
-                    projectileIterator.remove()
+                    // If piercing is active, the projectile is not removed
+                    if (!player.isPiercingActive()) {
+                        projectileIterator.remove()
+                    }
                     if (!enemy.isAlive()) {
                         killEnemy(enemy, enemyIterator)
                         break
@@ -492,13 +495,26 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             }
         }
 
-        if (TimeUtils.nanoTime() - lastShotTime > shotCooldownNanos) {
+        val effectiveCooldown = (shotCooldownNanos * player.getShotCooldownMultiplier()).toLong()
+        if (TimeUtils.nanoTime() - lastShotTime > effectiveCooldown) {
             if (rotationTouchpad.isTouched) {
-                val newProjectiles = ProjectileFactory.createProjectiles(
+                var newProjectiles = ProjectileFactory.createProjectiles(
                     player.projectileType,
                     player.position.cpy(),
                     lastPlayerDirection.cpy()
                 )
+
+                // Mirror shot: add projectiles in opposite direction
+                if (player.isMirrorShotActive()) {
+                    val mirrorDirection = lastPlayerDirection.cpy().scl(-1f)
+                    val mirrorProjectiles = ProjectileFactory.createProjectiles(
+                        player.projectileType,
+                        player.position.cpy(),
+                        mirrorDirection
+                    )
+                    newProjectiles = newProjectiles + mirrorProjectiles
+                }
+
                 addProjectilesRespectingLimit(newProjectiles)
             }
             lastShotTime = TimeUtils.nanoTime()
@@ -508,6 +524,15 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         val projectileIterator = projectiles.iterator()
         while (projectileIterator.hasNext()) {
             val projectile = projectileIterator.next()
+
+            // Efecto homing: los proyectiles persiguen al enemigo más cercano
+            if (player.isHomingActive() && projectile !is LaserProjectile) {
+                val nearestEnemy = enemies.minByOrNull { it.position.dst2(projectile.position) }
+                if (nearestEnemy != null) {
+                    projectile.homeTowards(nearestEnemy.position)
+                }
+            }
+
             projectile.update()
 
             if (projectile is LaserProjectile) {
@@ -543,19 +568,35 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         }
 
         satellite?.update(delta, enemies, projectiles)
+        for (drone in drones) {
+            drone.update(delta, enemies, projectiles)
+        }
 
         val powerUpIterator = powerUps.iterator()
         while (powerUpIterator.hasNext()) {
             val pu = powerUpIterator.next()
             if (pu.overlapsWith(player)) {
                 powerUpIterator.remove()
-                if (pu.type == PowerUp.Type.SATELLITE) {
-                    satellite = Satellite(player)
-                } else {
-                    player.applyPowerUp(pu)
+                when (pu.type) {
+                    PowerUp.Type.SATELLITE -> satellite = Satellite(player)
+                    PowerUp.Type.DRONE -> spawnDrone()
+                    PowerUp.Type.BOMB -> applyBombEffect()
+                    else -> player.applyPowerUp(pu)
                 }
             } else if (pu.isExpired()) {
                 powerUpIterator.remove()
+            }
+        }
+
+        // Magnet effect: attract nearby power-ups
+        if (player.isMagnetActive()) {
+            for (pu in powerUps) {
+                val dist = Vector2.dst(player.position.x, player.position.y, pu.position.x, pu.position.y)
+                if (dist < player.magnetRange && dist > 0) {
+                    val direction = Vector2(player.position.x - pu.position.x, player.position.y - pu.position.y)
+                    direction.nor().scl(200f * delta)
+                    pu.position.add(direction)
+                }
             }
         }
 
@@ -577,16 +618,41 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             enemy.render(spriteBatch)
         }
         satellite?.render(spriteBatch)
+        for (drone in drones) {
+            drone.render(spriteBatch)
+        }
         spriteBatch.end()
 
-        // Draw the shield circle if it is active
+        // Draw visual effects for active power-ups
+        shapeRenderer.projectionMatrix = camera.combined
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Line)
+
+        // Shield - círculo cyan
         if (player.isShieldActive()) {
-            shapeRenderer.projectionMatrix = camera.combined
-            shapeRenderer.begin(ShapeRenderer.ShapeType.Line)
             shapeRenderer.color = Color.CYAN
             shapeRenderer.circle(player.position.x, player.position.y, player.width)
-            shapeRenderer.end()
         }
+
+        // Invincibility - círculo dorado más grande
+        if (player.isInvincibilityActive()) {
+            shapeRenderer.color = Color.GOLD
+            shapeRenderer.circle(player.position.x, player.position.y, player.width * 1.2f)
+        }
+
+        // Magnet - círculo magenta mostrando el rango
+        if (player.isMagnetActive()) {
+            shapeRenderer.color = Color.MAGENTA
+            Gdx.gl.glLineWidth(1f)
+            shapeRenderer.circle(player.position.x, player.position.y, player.magnetRange)
+        }
+
+        // Time slow - efecto visual púrpura
+        if (player.isTimeSlowActive()) {
+            shapeRenderer.color = Color.PURPLE
+            shapeRenderer.circle(player.position.x, player.position.y, player.width * 0.8f)
+        }
+
+        shapeRenderer.end()
 
         shapeRenderer.projectionMatrix = camera.combined
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
@@ -650,6 +716,12 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
 
         val weaponText = player.projectileType.name
         if (labelStatWeapon.text.toString() != weaponText) labelStatWeapon.setText(weaponText)
+
+        // Update active power-ups display
+        val activePowerUpsText = buildActivePowerUpsText()
+        if (labelActivePowerUps.text.toString() != activePowerUpsText) {
+            labelActivePowerUps.setText(activePowerUpsText)
+        }
 
         hudStage.act(delta)
         hudStage.draw()
@@ -812,7 +884,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         }
 
         enemiesDefeated++
-        score += enemyScore
+        score += enemyScore * player.getScoreMultiplier()
 
         // Update peak score and check shop milestone against it,
         // so spending score and recovering doesn't re-trigger the same milestone.
@@ -822,27 +894,17 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             nextShopMilestoneScore += Constants.SHOP_MILESTONE_STEP_SCORE
         }
 
+        // Drop chance varies by enemy type: stronger enemies have better drop rates
         val dropChance = when (enemy.type) {
-            EnemyType.NORMAL -> 0.9
-            EnemyType.FAST -> 0.9
-            EnemyType.STRONG -> 0.9
+            EnemyType.NORMAL -> 0.12  // 12% - common enemy, low drop
+            EnemyType.FAST -> 0.18    // 18% - harder to kill, slightly better
+            EnemyType.STRONG -> 0.25  // 25% - tanky enemy, best drop rate
         }
 
         if (Math.random() < dropChance && powerUps.size < Constants.MAX_ACTIVE_POWER_UPS) {
-            val type = when (enemy.type) {
-                EnemyType.NORMAL -> PowerUp.Type.SATELLITE
-                EnemyType.FAST -> PowerUp.Type.TRIPLE_SHOT
-                EnemyType.STRONG -> PowerUp.Type.LASER
-            }
-
-            val color = when (type) {
-                PowerUp.Type.HEALTH -> Color.GREEN
-                PowerUp.Type.TRIPLE_SHOT -> Color.RED
-                PowerUp.Type.SHIELD -> Color.CYAN
-                PowerUp.Type.CHARGED_SHOT -> Color.YELLOW
-                PowerUp.Type.LASER -> Color.BLUE
-                PowerUp.Type.SATELLITE -> Color.WHITE
-            }
+            // Each enemy type has weighted probabilities for different power-up types
+            val type = selectWeightedPowerUp(enemy.type)
+            val color = PowerUp.getColor(type)
 
             powerUps.add(
                 PowerUp(
@@ -852,6 +914,144 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
                     type = type
                 )
             )
+        }
+    }
+
+    /**
+     * Selects a power-up type using weighted probabilities based on enemy type.
+     * Stronger enemies have better chances of dropping rare power-ups.
+     */
+    private fun selectWeightedPowerUp(enemyType: EnemyType): PowerUp.Type {
+        // Multiplicador de rareza según el tipo de enemigo
+        val rarityBoost = when (enemyType) {
+            EnemyType.NORMAL -> 0.8f  // Más comunes
+            EnemyType.FAST -> 1.0f    // Normal
+            EnemyType.STRONG -> 1.3f  // Más raros
+        }
+
+        // Categorías favorecidas por cada tipo de enemigo
+        val categoryBoost = when (enemyType) {
+            EnemyType.NORMAL -> mapOf(
+                PowerUp.Category.DEFENSIVE to 1.5f,
+                PowerUp.Category.OFFENSIVE to 1.0f,
+                PowerUp.Category.UTILITY to 0.8f,
+                PowerUp.Category.SPECIAL to 0.7f
+            )
+            EnemyType.FAST -> mapOf(
+                PowerUp.Category.DEFENSIVE to 1.0f,
+                PowerUp.Category.OFFENSIVE to 1.3f,
+                PowerUp.Category.UTILITY to 1.2f,
+                PowerUp.Category.SPECIAL to 0.9f
+            )
+            EnemyType.STRONG -> mapOf(
+                PowerUp.Category.DEFENSIVE to 0.8f,
+                PowerUp.Category.OFFENSIVE to 1.2f,
+                PowerUp.Category.UTILITY to 1.0f,
+                PowerUp.Category.SPECIAL to 1.5f
+            )
+        }
+
+        // Calcular pesos finales
+        val weights = PowerUp.Type.entries.map { type ->
+            val baseWeight = type.rarity * 100
+            val catBoost = categoryBoost[type.category] ?: 1.0f
+            (baseWeight * rarityBoost * catBoost).toInt().coerceAtLeast(1)
+        }
+
+        val totalWeight = weights.sum()
+        val roll = (Math.random() * totalWeight).toInt()
+
+        var cumulative = 0
+        PowerUp.Type.entries.forEachIndexed { index, type ->
+            cumulative += weights[index]
+            if (roll < cumulative) {
+                return type
+            }
+        }
+
+        return PowerUp.Type.HEALTH
+    }
+
+    /**
+     * Selects a random power-up based on rarity weights (for timed spawns).
+     */
+    private fun selectRandomPowerUpByRarity(): PowerUp.Type {
+        val weights = PowerUp.Type.entries.map { type ->
+            (type.rarity * 100).toInt().coerceAtLeast(1)
+        }
+
+        val totalWeight = weights.sum()
+        val roll = (Math.random() * totalWeight).toInt()
+
+        var cumulative = 0
+        PowerUp.Type.entries.forEachIndexed { index, type ->
+            cumulative += weights[index]
+            if (roll < cumulative) {
+                return type
+            }
+        }
+
+        return PowerUp.Type.HEALTH
+    }
+
+    /**
+     * Builds the text showing active temporary power-ups with remaining time.
+     */
+    private fun buildActivePowerUpsText(): String {
+        val activePowerUps = player.getActivePowerUps()
+
+        // Also add permanent power-ups (satellite, drones)
+        val permanentItems = mutableListOf<String>()
+        if (satellite != null) permanentItems.add("SAT")
+        if (drones.isNotEmpty()) permanentItems.add("DRN:${drones.size}")
+
+        if (activePowerUps.isEmpty() && permanentItems.isEmpty()) {
+            return "-"
+        }
+
+        val parts = mutableListOf<String>()
+
+        // First the permanent ones
+        parts.addAll(permanentItems)
+
+        // Then the temporary ones with remaining time
+        for ((icon, remainingMs) in activePowerUps) {
+            val seconds = (remainingMs / 1000).coerceAtLeast(0)
+            parts.add("$icon:${seconds}s")
+        }
+
+        return parts.joinToString(" ")
+    }
+
+    /**
+     * Spawns a new drone that follows and assists the player.
+     */
+    private fun spawnDrone() {
+        if (drones.size < maxDrones) {
+            drones.add(Drone(player, drones.size))
+        }
+    }
+
+    /**
+     * Applies bomb effect: damages all enemies on screen.
+     */
+    private fun applyBombEffect() {
+        val halfWidth = camera.viewportWidth / 2
+        val halfHeight = camera.viewportHeight / 2
+        val bombDamage = 50
+
+        val iterator = enemies.iterator()
+        while (iterator.hasNext()) {
+            val enemy = iterator.next()
+            // Only affects enemies on screen
+            val dx = abs(enemy.position.x - player.position.x)
+            val dy = abs(enemy.position.y - player.position.y)
+            if (dx < halfWidth && dy < halfHeight) {
+                enemy.takeDamage(bombDamage)
+                if (!enemy.isAlive()) {
+                    killEnemy(enemy, iterator)
+                }
+            }
         }
     }
 

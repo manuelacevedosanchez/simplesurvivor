@@ -17,7 +17,7 @@ open class Projectile(
     private val maxTravelDistance: Float = Constants.MAX_PROJECTILE_TRAVEL_DISTANCE,
     private val maxLifetimeMs: Long = Constants.MAX_PROJECTILE_LIFETIME_MS
 ) {
-    private val movementDirection = direction.cpy().apply {
+    protected val movementDirection = direction.cpy().apply {
         if (len2() == 0f) {
             set(1f, 0f)
         } else {
@@ -31,6 +31,14 @@ open class Projectile(
 
     open fun update() {
         position.mulAdd(movementDirection, speed * Gdx.graphics.deltaTime)
+    }
+
+    /**
+     * Adjusts projectile direction towards a target (for homing effect)
+     */
+    open fun homeTowards(target: Vector2, turnSpeed: Float = 5f) {
+        val toTarget = target.cpy().sub(position).nor()
+        movementDirection.lerp(toTarget, turnSpeed * Gdx.graphics.deltaTime).nor()
     }
 
     open fun shouldRemove(now: Long = TimeUtils.millis()): Boolean {

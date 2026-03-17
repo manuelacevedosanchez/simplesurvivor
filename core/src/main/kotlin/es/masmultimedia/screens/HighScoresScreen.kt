@@ -26,27 +26,27 @@ class HighScoresScreen(private val game: SimpleSurvivorGame) : Screen, InputProc
         Gdx.input.inputProcessor = stage
         val skin = Skin(Gdx.files.internal("uiskin.json"))
 
-        // Crear una tabla para organizar los widgets
+        // Create a table to organize widgets
         val table = Table()
         table.setFillParent(true)
         table.center()
 
-        // Título
+        // Title
         val titleLabel = Label("Puntuaciones Altas", skin)
         titleLabel.setFontScale(2f)
 
         table.add(titleLabel).padBottom(40f).row()
 
-        // Obtener las puntuaciones altas
+        // Get high scores
         val highScores = highScoreManager.getHighScores()
 
-        // Mostrar las puntuaciones altas
+        // Display high scores
         for ((index, scoreEntry) in highScores.withIndex()) {
             val scoreLabel = Label("${index + 1}. ${scoreEntry.first}: ${scoreEntry.second}", skin)
             table.add(scoreLabel).padBottom(10f).row()
         }
 
-        // Botón para volver al menú principal
+        // Button to return to main menu
         val backButton = TextButton("Volver al Menú", skin)
         backButton.addListener(object : ClickListener() {
             override fun clicked(event: InputEvent?, x: Float, y: Float) {
@@ -57,7 +57,7 @@ class HighScoresScreen(private val game: SimpleSurvivorGame) : Screen, InputProc
 
         table.add(backButton).width(200f).height(50f).padTop(30f)
 
-        // Añadir la tabla al stage
+        // Add table to stage
         stage.addActor(table)
 
         // Set up the InputMultiplexer
@@ -69,7 +69,7 @@ class HighScoresScreen(private val game: SimpleSurvivorGame) : Screen, InputProc
         Gdx.gl.glClearColor(0f, 0f, 0f, 1f)
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
 
-        // Dibujar la interfaz
+        // Draw the interface
         stage.act(delta)
         stage.draw()
     }

@@ -16,18 +16,18 @@ class AndroidLauncher : AndroidApplication() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Configurar el UncaughtExceptionHandler
+        // Configure UncaughtExceptionHandler
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             Gdx.app.error(
                 "UncaughtException",
-                "Excepción no controlada en el hilo ${thread.name}",
+                "Unhandled exception in thread ${thread.name}",
                 throwable
             )
-            // Opcional: Mostrar un mensaje al usuario o realizar alguna acción adicional
+            // Optional: Show a message to the user or perform additional action
         }
 
         val config = AndroidApplicationConfiguration().apply {
-            // hideStatusBar y useImmersiveMode están deprecados, manejaremos el modo inmersivo manualmente
+            // hideStatusBar and useImmersiveMode are deprecated, we'll handle immersive mode manually
         }
         initialize(SimpleSurvivorGame(), config)
         enterImmersiveMode()
@@ -36,14 +36,14 @@ class AndroidLauncher : AndroidApplication() {
     @Suppress("DEPRECATION")
     private fun enterImmersiveMode() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            // API nivel 30 y superiores
+            // API level 30 and above
             window.insetsController?.let { controller ->
                 controller.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
                 controller.systemBarsBehavior =
                     WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
         } else {
-            // API nivel 29 y anteriores
+            // API level 29 and below
             window.decorView.systemUiVisibility = (
                 View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
                     or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
@@ -54,7 +54,7 @@ class AndroidLauncher : AndroidApplication() {
 
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
-        // No llamar a super.onBackPressed() para evitar que la actividad cierre la aplicación
+        // Don't call super.onBackPressed() to prevent the activity from closing the app
         Gdx.app.postRunnable {
             Gdx.input.inputProcessor?.keyDown(Input.Keys.BACK)
         }

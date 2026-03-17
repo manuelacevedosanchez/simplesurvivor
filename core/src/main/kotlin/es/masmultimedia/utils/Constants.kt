@@ -3,7 +3,7 @@ package es.masmultimedia.utils
 object Constants {
     const val MAX_ACTIVE_ENEMIES = 75
     const val MAX_ACTIVE_PROJECTILES = 160
-    const val MAX_ACTIVE_POWER_UPS = 40
+    const val MAX_ACTIVE_POWER_UPS = 8
 
     // Reserved for upcoming enemy shooters.
     const val MAX_ACTIVE_ENEMY_PROJECTILES = 120
