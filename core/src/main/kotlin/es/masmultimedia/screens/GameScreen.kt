@@ -38,9 +38,10 @@ import es.masmultimedia.entities.Star
 import es.masmultimedia.game.SimpleSurvivorGame
 import es.masmultimedia.utils.Constants
 import es.masmultimedia.utils.GameAssetManager
+import es.masmultimedia.utils.JoystickRenderer
 import es.masmultimedia.utils.intersectsSegment
-import java.util.Locale
 import ktx.math.random
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
@@ -81,6 +82,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
 
     // Shop progression by score milestones.
     private var nextShopMilestoneScore = Constants.SHOP_FIRST_MILESTONE_SCORE
+
     // Peak score ever reached this run – used to avoid re-triggering the shop
     // if the player spends score and climbs back to the same milestone.
     private var peakScore = 0
@@ -97,6 +99,8 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
     private lateinit var stage: Stage
     private lateinit var movementTouchpad: Touchpad
     private lateinit var rotationTouchpad: Touchpad
+
+    private val joystickRenderer = JoystickRenderer()
 
     // Starfield layers for parallax
     private val starsFar = mutableListOf<Star>()
@@ -169,12 +173,14 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         val marginX = screenWidth * marginPercentage
         val marginY = screenHeight * marginPercentage
 
+        // Create invisible touchpad style (no visible drawables)
         val touchpadStyle = Touchpad.TouchpadStyle().apply {
-            background = skin.getDrawable("default-round")
-            knob = skin.getDrawable("default-round")
+            // Leave background and knob null for invisible touchpads
+            background = null
+            knob = null
         }
 
-        val touchpadSize = screenWidth * 0.10f // 10% of the width, for example
+        val touchpadSize = screenWidth * 0.18f // Slightly larger for better usability
 
         // Example: movement touchpad in the bottom-left corner
         // Place it with a left margin and a bottom margin
@@ -186,7 +192,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         // Subtract 200f (touchpad width) plus the margin
         rotationTouchpad = Touchpad(10f, touchpadStyle).apply {
             setBounds(
-                screenWidth - 200f - marginX,
+                screenWidth - touchpadSize - marginX,
                 marginY,
                 touchpadSize,
                 touchpadSize
@@ -235,13 +241,13 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         markerCountFont = generator.generateFont(markerParams)
         generator.dispose()
 
-        val labelStyle      = Label.LabelStyle(hudFont,      Color.WHITE)
-        val eventLabelStyle = Label.LabelStyle(hudFont,      Color(1f, 0.55f, 0.25f, 1f))
+        val labelStyle = Label.LabelStyle(hudFont, Color.WHITE)
+        val eventLabelStyle = Label.LabelStyle(hudFont, Color(1f, 0.55f, 0.25f, 1f))
         val statsLabelStyle = Label.LabelStyle(hudStatsFont, Color(0.85f, 0.85f, 0.85f, 0.9f))
         val statsValueStyle = Label.LabelStyle(hudStatsFont, Color(0.6f, 1f, 0.6f, 1f))
 
         labelKills = Label("Kills: 0", labelStyle)
-        labelTime  = Label("0:00", labelStyle)
+        labelTime = Label("0:00", labelStyle)
         labelScore = Label("Score: 0", labelStyle)
         labelEvent = Label("", eventLabelStyle)
         labelScore.setAlignment(Align.right)
@@ -253,11 +259,11 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         labelKills.setText(hudKillsText)
 
         // Live ship/weapon stats labels (values updated every frame).
-        labelStatHp       = Label("100 / 100", statsValueStyle)
-        labelStatSpeed    = Label("100%",       statsValueStyle)
-        labelStatFireRate = Label("500 ms",     statsValueStyle)
-        labelStatDmgReduc = Label("-0%",        statsValueStyle)
-        labelStatWeapon   = Label("BASIC",      statsValueStyle)
+        labelStatHp = Label("100 / 100", statsValueStyle)
+        labelStatSpeed = Label("100%", statsValueStyle)
+        labelStatFireRate = Label("500 ms", statsValueStyle)
+        labelStatDmgReduc = Label("-0%", statsValueStyle)
+        labelStatWeapon = Label("BASIC", statsValueStyle)
 
         // Stats sub-table – two columns: label name | value
         val statsTable = Table()
@@ -265,11 +271,11 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             statsTable.add(Label(name, statsLabelStyle)).left().padRight(6f)
             statsTable.add(valueLabel).left().row()
         }
-        statRow("HP:",      labelStatHp)
-        statRow("Speed:",   labelStatSpeed)
-        statRow("Fire:",    labelStatFireRate)
-        statRow("Armor:",   labelStatDmgReduc)
-        statRow("Weapon:",  labelStatWeapon)
+        statRow("HP:", labelStatHp)
+        statRow("Speed:", labelStatSpeed)
+        statRow("Fire:", labelStatFireRate)
+        statRow("Armor:", labelStatDmgReduc)
+        statRow("Weapon:", labelStatWeapon)
 
         val pad = Gdx.graphics.width * 0.025f
         val sideMinWidth = Gdx.graphics.width * 0.30f
@@ -593,6 +599,9 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         stage.act(delta)
         stage.draw()
 
+        // Draw custom joysticks on top of stage
+        drawJoysticks()
+
         drawEnemyEdgeIndicators()
 
         // Update and draw HUD on top
@@ -898,11 +907,13 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         val sign = if (value < 0) "-" else ""
 
         if (absValue >= 1_000_000_000L) {
-            val formatted = String.format(Locale.US, "%.1f", absValue / 1_000_000_000.0).removeSuffix(".0")
+            val formatted =
+                String.format(Locale.US, "%.1f", absValue / 1_000_000_000.0).removeSuffix(".0")
             return "$sign${formatted}B"
         }
         if (absValue >= 1_000_000L) {
-            val formatted = String.format(Locale.US, "%.1f", absValue / 1_000_000.0).removeSuffix(".0")
+            val formatted =
+                String.format(Locale.US, "%.1f", absValue / 1_000_000.0).removeSuffix(".0")
             return "$sign${formatted}M"
         }
         if (absValue >= 1_000L) {
@@ -1043,12 +1054,13 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         })
         generator.dispose()
 
-        val titleStyle  = Label.LabelStyle(titleFont, Color.WHITE)
-        val bodyStyle   = Label.LabelStyle(bodyFont,  Color.WHITE)
-        val smallStyle  = Label.LabelStyle(smallFont, Color.WHITE)
-        val statStyle   = Label.LabelStyle(smallFont, Color(0.75f, 1f, 0.75f, 1f)) // soft green for stat values
+        val titleStyle = Label.LabelStyle(titleFont, Color.WHITE)
+        val bodyStyle = Label.LabelStyle(bodyFont, Color.WHITE)
+        val smallStyle = Label.LabelStyle(smallFont, Color.WHITE)
+        val statStyle =
+            Label.LabelStyle(smallFont, Color(0.75f, 1f, 0.75f, 1f)) // soft green for stat values
         val buttonStyle = com.badlogic.gdx.scenes.scene2d.ui.TextButton.TextButtonStyle().apply {
-            up   = dialogSkin.getDrawable("default-round")
+            up = dialogSkin.getDrawable("default-round")
             down = dialogSkin.getDrawable("default-round-down")
             font = bodyFont
         }
@@ -1078,22 +1090,28 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
 
         fun applyUpgrade(option: String) {
             when (option) {
-                "rapid"  -> if (score >= rapidCost) {
+                "rapid" -> if (score >= rapidCost) {
                     score -= rapidCost
-                    shotCooldownNanos = (shotCooldownNanos * 0.85f).toLong().coerceAtLeast(160_000_000L)
+                    shotCooldownNanos =
+                        (shotCooldownNanos * 0.85f).toLong().coerceAtLeast(160_000_000L)
                 }
+
                 "engine" -> if (score >= engineCost) {
                     score -= engineCost
                     moveSpeedMultiplier = (moveSpeedMultiplier + 0.15f).coerceAtMost(2.2f)
                 }
-                "hull"   -> if (score >= hullCost) {
+
+                "hull" -> if (score >= hullCost) {
                     score -= hullCost
                     damageTakenMultiplier = (damageTakenMultiplier * 0.9f).coerceAtLeast(0.45f)
                 }
+
                 "repair" -> if (score >= repairCost) {
                     score -= repairCost
-                    player.currentHealth = (player.currentHealth + 35).coerceAtMost(player.maxHealth)
+                    player.currentHealth =
+                        (player.currentHealth + 35).coerceAtMost(player.maxHealth)
                 }
+
                 "reroll" -> if (score >= rerollCost) {
                     score -= rerollCost
                     closeShopDialog()
@@ -1105,17 +1123,17 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             closeShopDialog()
         }
 
-        val btnWidth  = Gdx.graphics.width  * 0.33f
+        val btnWidth = Gdx.graphics.width * 0.33f
         val btnHeight = Gdx.graphics.height * 0.09f
-        val pad       = Gdx.graphics.height * 0.022f
-        val statColW  = Gdx.graphics.width  * 0.28f
+        val pad = Gdx.graphics.height * 0.022f
+        val statColW = Gdx.graphics.width * 0.28f
 
         // Derived readable stat values for the left stats panel.
-        val fireRateMs   = shotCooldownNanos / 1_000_000L
-        val speedPct     = (moveSpeedMultiplier * 100).toInt()
+        val fireRateMs = shotCooldownNanos / 1_000_000L
+        val speedPct = (moveSpeedMultiplier * 100).toInt()
         val dmgReductPct = ((1f - damageTakenMultiplier) * 100).toInt().coerceAtLeast(0)
-        val hp           = player.currentHealth
-        val maxHp        = player.maxHealth
+        val hp = player.currentHealth
+        val maxHp = player.maxHealth
 
         // ── Stats panel (left column) ──────────────────────────────────────
         val statsTable = Table()
@@ -1125,20 +1143,29 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             statsTable.add(Label(label, smallStyle)).left().padRight(pad * 0.4f)
             statsTable.add(Label(value, statStyle)).right().row()
         }
-        statRow("HP:",         "$hp / $maxHp")
-        statRow("Speed:",      "${speedPct}%")
-        statRow("Fire rate:",  "${fireRateMs} ms")
+        statRow("HP:", "$hp / $maxHp")
+        statRow("Speed:", "${speedPct}%")
+        statRow("Fire rate:", "$fireRateMs ms")
         statRow("Dmg reduc:", "-${dmgReductPct}%")
 
         // ── Shop panel (right column) ──────────────────────────────────────
         val shopTable = Table()
-        shopTable.add(Label("MILESTONE SHOP", titleStyle)).padBottom(pad * 0.5f).colspan(2).center().row()
-        shopTable.add(Label("Score: $score", bodyStyle)).padBottom(pad * 0.8f).colspan(2).center().row()
+        shopTable.add(Label("MILESTONE SHOP", titleStyle)).padBottom(pad * 0.5f).colspan(2).center()
+            .row()
+        shopTable.add(Label("Score: $score", bodyStyle)).padBottom(pad * 0.8f).colspan(2).center()
+            .row()
 
         fun upgradeBtn(label: String, preview: String, cost: Int, key: String) {
-            val btn = com.badlogic.gdx.scenes.scene2d.ui.TextButton("$label\n$preview\n(-$cost pts)", buttonStyle)
+            val btn = com.badlogic.gdx.scenes.scene2d.ui.TextButton(
+                "$label\n$preview\n(-$cost pts)",
+                buttonStyle
+            )
             btn.addListener(object : com.badlogic.gdx.scenes.scene2d.utils.ClickListener() {
-                override fun clicked(event: com.badlogic.gdx.scenes.scene2d.InputEvent?, x: Float, y: Float) {
+                override fun clicked(
+                    event: com.badlogic.gdx.scenes.scene2d.InputEvent?,
+                    x: Float,
+                    y: Float
+                ) {
                     applyUpgrade(key)
                 }
             })
@@ -1146,13 +1173,15 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         }
 
         val currentRapidMs = shotCooldownNanos / 1_000_000L
-        val newRapidMs = (shotCooldownNanos * 0.85f).toLong().coerceAtLeast(160_000_000L) / 1_000_000L
+        val newRapidMs =
+            (shotCooldownNanos * 0.85f).toLong().coerceAtLeast(160_000_000L) / 1_000_000L
 
         val currentSpeed = (moveSpeedMultiplier * 100).toInt()
         val newSpeed = ((moveSpeedMultiplier + 0.15f).coerceAtMost(2.2f) * 100).toInt()
 
         val currentReduc = ((1f - damageTakenMultiplier) * 100).toInt().coerceAtLeast(0)
-        val newReduc = ((1f - (damageTakenMultiplier * 0.9f).coerceAtLeast(0.45f)) * 100).toInt().coerceAtLeast(0)
+        val newReduc = ((1f - (damageTakenMultiplier * 0.9f).coerceAtLeast(0.45f)) * 100).toInt()
+            .coerceAtLeast(0)
 
         val currentHp = player.currentHealth
         val newHp = (player.currentHealth + 35).coerceAtMost(player.maxHealth)
@@ -1164,16 +1193,27 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         upgradeBtn("Repair", "$currentHp -> $newHp HP", repairCost, "repair")
         shopTable.row()
 
-        val rerollBtn = com.badlogic.gdx.scenes.scene2d.ui.TextButton("Reroll Offers\n(-$rerollCost pts)", buttonStyle)
+        val rerollBtn = com.badlogic.gdx.scenes.scene2d.ui.TextButton(
+            "Reroll Offers\n(-$rerollCost pts)",
+            buttonStyle
+        )
         rerollBtn.addListener(object : com.badlogic.gdx.scenes.scene2d.utils.ClickListener() {
-            override fun clicked(event: com.badlogic.gdx.scenes.scene2d.InputEvent?, x: Float, y: Float) {
+            override fun clicked(
+                event: com.badlogic.gdx.scenes.scene2d.InputEvent?,
+                x: Float,
+                y: Float
+            ) {
                 applyUpgrade("reroll")
             }
         })
 
         val skipBtn = com.badlogic.gdx.scenes.scene2d.ui.TextButton("Saltar", buttonStyle)
         skipBtn.addListener(object : com.badlogic.gdx.scenes.scene2d.utils.ClickListener() {
-            override fun clicked(event: com.badlogic.gdx.scenes.scene2d.InputEvent?, x: Float, y: Float) {
+            override fun clicked(
+                event: com.badlogic.gdx.scenes.scene2d.InputEvent?,
+                x: Float,
+                y: Float
+            ) {
                 applyUpgrade("skip")
             }
         })
@@ -1309,7 +1349,13 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         }
     }
 
-    private fun drawIndicatorTriangle(markerX: Float, markerY: Float, centerX: Float, centerY: Float, size: Float) {
+    private fun drawIndicatorTriangle(
+        markerX: Float,
+        markerY: Float,
+        centerX: Float,
+        centerY: Float,
+        size: Float
+    ) {
         val dx = markerX - centerX
         val dy = markerY - centerY
         val lengthSquared = dx * dx + dy * dy
@@ -1319,22 +1365,19 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         val dirX = dx * invLength
         val dirY = dy * invLength
         val perpX = -dirY
-        val perpY = dirX
 
         val baseDistance = size * 1.8f
         val halfWidth = size * 0.9f
 
-        val tipX = markerX
-        val tipY = markerY
-        val baseX = tipX - dirX * baseDistance
-        val baseY = tipY - dirY * baseDistance
+        val baseX = markerX - dirX * baseDistance
+        val baseY = markerY - dirY * baseDistance
 
         val leftX = baseX + perpX * halfWidth
-        val leftY = baseY + perpY * halfWidth
+        val leftY = baseY + dirX * halfWidth
         val rightX = baseX - perpX * halfWidth
-        val rightY = baseY - perpY * halfWidth
+        val rightY = baseY - dirX * halfWidth
 
-        shapeRenderer.triangle(tipX, tipY, leftX, leftY, rightX, rightY)
+        shapeRenderer.triangle(markerX, markerY, leftX, leftY, rightX, rightY)
     }
 
     private data class EdgeMarker(
@@ -1343,4 +1386,26 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         var enemyType: EnemyType,
         var count: Int
     )
+
+    private fun drawJoysticks() {
+        // Use a separate projection for screen-space UI
+        val uiProjection = hudStage.camera.combined
+
+        shapeRenderer.projectionMatrix = uiProjection
+
+        // Enable blending for transparency
+        Gdx.gl.glEnable(GL20.GL_BLEND)
+        Gdx.gl.glBlendFunc(
+            GL20.GL_SRC_ALPHA,
+            GL20.GL_ONE_MINUS_SRC_ALPHA
+        )
+
+        // Render movement joystick (blue)
+        joystickRenderer.render(shapeRenderer, movementTouchpad, isFireJoystick = false)
+
+        // Render rotation/fire joystick (red)
+        joystickRenderer.render(shapeRenderer, rotationTouchpad, isFireJoystick = true)
+
+        Gdx.gl.glDisable(GL20.GL_BLEND)
+    }
 }
