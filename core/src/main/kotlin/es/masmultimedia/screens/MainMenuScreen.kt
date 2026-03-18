@@ -95,6 +95,14 @@ class MainMenuScreen(private val game: SimpleSurvivorGame) : Screen, InputProces
             }
         })
 
+        infoButton.addListener(object : ClickListener() {
+            override fun clicked(event: InputEvent?, x: Float, y: Float) {
+                AudioManager.playButtonClick()
+                game.screen = InformationScreen(game)
+                dispose()
+            }
+        })
+
         // Calculate relative sizes for buttons
         val buttonWidth = screenWidth * 0.2f // 60% of screen width
         val buttonHeight = screenHeight * 0.1f // 10% of screen height
