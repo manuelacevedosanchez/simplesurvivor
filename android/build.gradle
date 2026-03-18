@@ -6,6 +6,16 @@ buildscript {
 }
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
+// Firebase plugins - uncomment when google-services.json is added
+// apply plugin: 'com.google.gms.google-services'
+// apply plugin: 'com.google.firebase.crashlytics'
+
+// Load keystore properties for release signing
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
 
 android {
   namespace "es.masmultimedia"
@@ -13,6 +23,17 @@ android {
 
   buildFeatures {
     buildConfig true
+  }
+
+  signingConfigs {
+    release {
+      if (keystorePropertiesFile.exists()) {
+        storeFile file(keystoreProperties['storeFile'])
+        storePassword keystoreProperties['storePassword']
+        keyAlias keystoreProperties['keyAlias']
+        keyPassword keystoreProperties['keyPassword']
+      }
+    }
   }
 
   sourceSets {
@@ -64,7 +85,11 @@ android {
       shrinkResources true
       buildConfigField 'boolean', 'IS_PRO_BUILD', 'true'
       proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-      signingConfig signingConfigs.debug
+      if (keystorePropertiesFile.exists()) {
+        signingConfig signingConfigs.release
+      } else {
+        signingConfig signingConfigs.debug
+      }
     }
 
     release {
@@ -73,6 +98,9 @@ android {
       debuggable false
       buildConfigField 'boolean', 'IS_PRO_BUILD', 'true'
       proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+      if (keystorePropertiesFile.exists()) {
+        signingConfig signingConfigs.release
+      }
     }
   }
 
@@ -92,6 +120,11 @@ dependencies {
   implementation "com.badlogicgames.gdx:gdx-backend-android:$gdxVersion"
   implementation "com.crashinvaders.lml:gdx-autumn-android:$lmlVersion"
   implementation project(':core')
+
+  // Firebase - uncomment when google-services.json is added
+  // implementation platform('com.google.firebase:firebase-bom:32.7.0')
+  // implementation 'com.google.firebase:firebase-crashlytics'
+  // implementation 'com.google.firebase:firebase-analytics'
 
   natives "com.badlogicgames.gdx:gdx-box2d-platform:$gdxVersion:natives-arm64-v8a"
   natives "com.badlogicgames.gdx:gdx-box2d-platform:$gdxVersion:natives-armeabi-v7a"

@@ -2,63 +2,94 @@ package es.masmultimedia.utils
 
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.assets.AssetManager
+import com.badlogic.gdx.audio.Music
+import com.badlogic.gdx.audio.Sound
 import com.badlogic.gdx.graphics.Texture
 
 object GameAssetManager {
     val manager = AssetManager()
 
+    // List of all texture assets
+    private val texturesToLoad = listOf(
+        // Spaceship textures
+        "spaceship_base.png",
+        "fast_spaceship.png",
+        "strong_spaceship.png",
+
+        // Enemy textures
+        "enemy_normal.png",
+        "fast_enemy.png",
+        "strong_enemy.png",
+
+        // UI and background textures
+        "menu_background.png",
+        "game_over_background.png",
+        "background.png",
+        "logo.png",
+
+        // Other textures
+        "satellite.png",
+    )
+
+    // List of sound effects
+    private val soundsToLoad = listOf(
+        "sounds/shoot.wav",
+        "sounds/explosion.wav",
+        "sounds/powerup.wav",
+        "sounds/hit.wav",
+        "sounds/game_over.wav",
+        "sounds/button_click.wav",
+        "sounds/level_up.wav",
+        "sounds/shop_purchase.wav",
+    )
+
+    // List of music tracks
+    private val musicToLoad = listOf(
+        "music/menu_theme.ogg",
+        "music/game_theme.ogg",
+        "music/game_over_theme.ogg",
+    )
+
     /**
-     * Loads all necessary game assets.
-     *
-     * This method loads all textures and other resources used in the game using LibGDX's `AssetManager`.
-     * It should be called before initializing any screen or class that requires these resources to ensure
-     * all assets are available when needed.
-     *
-     * Functionality:
-     * - Defines a list of file paths for textures to load.
-     * - Checks if each file exists in the assets folder before attempting to load.
-     *   - If the file exists, it is loaded using the `AssetManager`.
-     *   - If the file does not exist, a warning message is logged.
-     * - Calls `manager.finishLoading()` to complete the loading process before continuing.
-     *
-     * Includes:
-     * - All textures (images) used in the game, such as spaceships, enemies, backgrounds, UI elements, etc.
-     * - Other resources like sounds (`Sound`), music (`Music`), custom fonts, UI skins, etc., if managed through the `AssetManager`.
-     *
-     * Notes:
-     * - Keep the resource list updated as assets are added or removed from the game.
-     * - Verifying the existence of files before loading helps avoid runtime errors due to missing files.
-     * - If a resource is not available, a default texture is used to prevent failures.
-     * - Resources loaded with the `AssetManager` should be disposed of at the end of the game by calling the `dispose()` method of this class.
+     * Queues all assets for asynchronous loading.
+     * Call manager.update() in render loop to progress loading.
+     * Use manager.isFinished to check completion.
      */
-    fun loadAssets() {
-        // List of assets to load
-        val texturesToLoad = listOf(
-            // Spaceship textures
-            "spaceship_base.png",
-            "fast_spaceship.png",
-            "strong_spaceship.png",
-
-
-            // UI and background textures
-            "menu_background.png",
-            "logo.png",
-
-            // Other textures used in the game
-            "satellite.png",
-
-            // Add any other textures here
-        )
-
-        // Load textures checking if they exist
+    fun queueAssets() {
+        // Queue textures
         for (texturePath in texturesToLoad) {
             if (Gdx.files.internal(texturePath).exists()) {
                 manager.load(texturePath, Texture::class.java)
             } else {
-                Gdx.app.log("GameAssetManager", "File $texturePath does not exist. Not loading.")
+                Gdx.app.log("GameAssetManager", "Texture $texturePath does not exist. Skipping.")
             }
         }
 
+        // Queue sounds
+        for (soundPath in soundsToLoad) {
+            if (Gdx.files.internal(soundPath).exists()) {
+                manager.load(soundPath, Sound::class.java)
+            } else {
+                Gdx.app.log("GameAssetManager", "Sound $soundPath does not exist. Skipping.")
+            }
+        }
+
+        // Queue music
+        for (musicPath in musicToLoad) {
+            if (Gdx.files.internal(musicPath).exists()) {
+                manager.load(musicPath, Music::class.java)
+            } else {
+                Gdx.app.log("GameAssetManager", "Music $musicPath does not exist. Skipping.")
+            }
+        }
+    }
+
+    /**
+     * Loads all necessary game assets synchronously (blocking).
+     * @deprecated Use queueAssets() with async loading instead.
+     */
+    fun loadAssets() {
+        queueAssets()
         // Wait for all assets to load
         manager.finishLoading()
     }
@@ -108,5 +139,45 @@ object GameAssetManager {
 
     fun dispose() {
         manager.dispose()
+    }
+
+    // Sound helper methods
+    fun getSound(path: String): Sound? {
+        return if (manager.isLoaded(path, Sound::class.java)) {
+            manager.get(path, Sound::class.java)
+        } else {
+            null
+        }
+    }
+
+    fun playSound(path: String, volume: Float = 1f): Long {
+        return getSound(path)?.play(volume) ?: -1L
+    }
+
+    // Music helper methods
+    fun getMusic(path: String): Music? {
+        return if (manager.isLoaded(path, Music::class.java)) {
+            manager.get(path, Music::class.java)
+        } else {
+            null
+        }
+    }
+
+    fun playMusic(path: String, looping: Boolean = true, volume: Float = 0.5f) {
+        getMusic(path)?.apply {
+            isLooping = looping
+            this.volume = volume
+            play()
+        }
+    }
+
+    fun stopMusic(path: String) {
+        getMusic(path)?.stop()
+    }
+
+    fun stopAllMusic() {
+        for (musicPath in musicToLoad) {
+            stopMusic(musicPath)
+        }
     }
 }

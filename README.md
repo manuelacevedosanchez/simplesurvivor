@@ -62,3 +62,64 @@ The `android` module now defines two main build variants you can work with:
 - `debug` and `pro` also have separate launcher names and icons, so they are easy to distinguish on-device.
 - `release` still exists for compatibility, but the recommended production path is `pro`.
 - You can check the active mode from `BuildConfig.IS_PRO_BUILD` if you need runtime switches.
+
+## Play Store Preparation
+
+This project includes several features to prepare for Play Store release:
+
+### 1. Release Signing Configuration
+
+1. Copy `keystore.properties.template` to `keystore.properties`
+2. Generate a release keystore:
+   ```bash
+   keytool -genkey -v -keystore release-keystore.jks -keyalias your_alias -keyalg RSA -keysize 2048 -validity 10000
+   ```
+3. Fill in `keystore.properties` with your keystore details
+4. Build the signed APK/AAB:
+   ```bash
+   ./gradlew :android:bundlePro  # For AAB (recommended for Play Store)
+   ./gradlew :android:assemblePro  # For APK
+   ```
+
+### 2. Loading Screen (Async Asset Loading)
+
+The game now uses `LoadingScreen` to load assets asynchronously, preventing ANR (Application Not Responding) issues on Android.
+
+### 3. Audio System
+
+- `AudioManager` - Centralized audio control with volume settings
+- Add sound files to `assets/sounds/` (WAV format)
+- Add music files to `assets/music/` (OGG format)
+- See `assets/sounds/README.md` and `assets/music/README.md` for details
+
+### 4. Internationalization (i18n)
+
+Multi-language support using LibGDX I18NBundle:
+- English (default): `assets/i18n/strings.properties`
+- Spanish: `assets/i18n/strings_es.properties`
+- Portuguese: `assets/i18n/strings_pt.properties`
+
+Use `I18n.get("key")` or `I18n.format("key", args)` to get localized strings.
+
+### 5. Firebase Crashlytics (Optional)
+
+For crash reporting in production:
+1. Follow instructions in `FIREBASE_SETUP.md`
+2. Add `google-services.json` to `android/`
+3. Uncomment Firebase plugins in `android/build.gradle`
+
+### Play Store Checklist
+
+Before submitting to Play Store, ensure you have:
+
+- [ ] Release keystore created and configured
+- [ ] Privacy Policy URL
+- [ ] App icon (512x512 PNG)
+- [ ] Feature graphic (1024x500)
+- [ ] Screenshots (min 2, recommended 8)
+- [ ] Short and full descriptions
+- [ ] Content rating questionnaire completed
+- [ ] Target audience and content declaration
+- [ ] Sound effects and music added
+- [ ] Tested on multiple devices/screen sizes
+

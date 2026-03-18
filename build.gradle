@@ -11,7 +11,9 @@ buildscript {
   dependencies {
     classpath "com.android.tools.build:gradle:8.5.2"
     classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion"
-
+    // Firebase
+    classpath 'com.google.gms:google-services:4.4.0'
+    classpath 'com.google.firebase:firebase-crashlytics-gradle:2.9.9'
   }
 }
 
@@ -58,7 +60,7 @@ configure(subprojects - project(':android')) {
   }
   compileKotlin.compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8)
   compileTestKotlin.compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8)
-  
+
 }
 
 subprojects {

@@ -3,8 +3,10 @@ package es.masmultimedia.game
 import com.badlogic.gdx.Game
 import com.badlogic.gdx.graphics.g2d.BitmapFont
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
-import es.masmultimedia.screens.MainMenuScreen
+import es.masmultimedia.screens.LoadingScreen
+import es.masmultimedia.utils.AudioManager
 import es.masmultimedia.utils.GameAssetManager
+import es.masmultimedia.utils.I18n
 
 class SimpleSurvivorGame : Game() {
     lateinit var batch: SpriteBatch
@@ -14,10 +16,14 @@ class SimpleSurvivorGame : Game() {
         batch = SpriteBatch()
         font = BitmapFont()
 
-        // Cargar los assets aquí
-        GameAssetManager.loadAssets()
+        // Initialize audio settings from saved preferences
+        AudioManager.init()
 
-        this.setScreen(MainMenuScreen(this))
+        // Initialize internationalization
+        I18n.init()
+
+        // Start with loading screen - assets will be loaded asynchronously
+        this.setScreen(LoadingScreen(this))
     }
 
     override fun render() {

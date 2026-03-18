@@ -32,6 +32,14 @@ hs_err_pid*
 local.properties
 com_crashlytics_export_strings.xml
 
+## Release signing (NEVER commit these!)
+keystore.properties
+*.jks
+*.keystore
+
+## Firebase configuration (may contain sensitive project info)
+# google-services.json
+
 ## Robovm:
 /ios/robovm-build/
 
