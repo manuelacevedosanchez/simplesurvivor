@@ -19,6 +19,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.TextField
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener
 import com.badlogic.gdx.utils.viewport.ScreenViewport
 import es.masmultimedia.game.SimpleSurvivorGame
+import es.masmultimedia.utils.AudioManager
 import es.masmultimedia.utils.HighScoreManager
 
 class GameOverScreen(
@@ -33,6 +34,9 @@ class GameOverScreen(
     private val highScoreManager = HighScoreManager()
 
     override fun show() {
+        // Play game over music
+        AudioManager.playGameOverMusic()
+
         val skin = Skin(Gdx.files.internal("uiskin.json"))
 
         // Build density-aware fonts so the screen is readable on any phone.

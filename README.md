@@ -123,3 +123,21 @@ Before submitting to Play Store, ensure you have:
 - [ ] Sound effects and music added
 - [ ] Tested on multiple devices/screen sizes
 
+---
+
+## Credits & Attribution
+
+See [CREDITS.md](CREDITS.md) for full details.
+
+### Music
+- **"Hitman"** by Kevin MacLeod ([incompetech.com](https://incompetech.com)) — Licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/)
+  - Used as: `menu_theme.ogg`
+- **emanresU** ([ko-fi](https://ko-fi.com/emanresu102396))
+  - Used as: `game_theme.ogg`
+- **Devlin Bataric**
+  - Used as: `game_over_theme.ogg`
+
+### Sound Effects
+- **Impact Sounds (1.0)** by Kenney ([kenney.nl](https://www.kenney.nl)) — [CC0 1.0](http://creativecommons.org/publicdomain/zero/1.0/)
+  - Used as: `button_click.wav`, `explosion.wav`, `game_over.wav`, `hit.wav`, `level_up.wav`, `powerup.wav`, `shoot.wav`
+

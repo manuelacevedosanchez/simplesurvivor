@@ -37,6 +37,7 @@ import es.masmultimedia.entities.Satellite
 import es.masmultimedia.entities.Spaceship
 import es.masmultimedia.entities.Star
 import es.masmultimedia.game.SimpleSurvivorGame
+import es.masmultimedia.utils.AudioManager
 import es.masmultimedia.utils.Constants
 import es.masmultimedia.utils.GameAssetManager
 import es.masmultimedia.utils.JoystickRenderer
@@ -149,6 +150,9 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
     private val stormTelegraphMs = 3_000L
 
     override fun show() {
+        // Start game music
+        AudioManager.playGameMusic()
+
         camera = OrthographicCamera().apply {
             setToOrtho(false, 800f, 600f)
             position.set(0f, 0f, 0f)
@@ -465,11 +469,13 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             if (enemy.bounds.overlaps(playerBounds)) {
                 val contactDamage = (20f * damageTakenMultiplier).toInt().coerceAtLeast(1)
                 player.takeDamage(contactDamage)
+                AudioManager.playHit()
                 enemyIterator.remove()
                 if (!player.isAlive()) {
                     gameEnded = true
                     gameWon = false
                     gameEndMessage = "¡Juego Terminado!"
+                    AudioManager.playGameOver()
                     return
                 }
                 continue
@@ -517,6 +523,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
                 }
 
                 addProjectilesRespectingLimit(newProjectiles)
+                AudioManager.playShoot()
             }
             lastShotTime = TimeUtils.nanoTime()
         }
@@ -578,6 +585,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             val pu = powerUpIterator.next()
             if (pu.overlapsWith(player)) {
                 powerUpIterator.remove()
+                AudioManager.playPowerUp()
                 when (pu.type) {
                     PowerUp.Type.SATELLITE -> satellite = Satellite(player)
                     PowerUp.Type.DRONE -> spawnDrone()
@@ -868,6 +876,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
 
     private fun killEnemy(enemy: ProceduralEnemy, enemyIterator: MutableIterator<ProceduralEnemy>) {
         enemyIterator.remove()
+        AudioManager.playExplosion()
 
         val enemyScore = when (enemy.type) {
             EnemyType.NORMAL -> Constants.SCORE_ENEMY_NORMAL
@@ -1291,37 +1300,44 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         }
 
         fun applyUpgrade(option: String) {
+            var purchased = false
             when (option) {
                 "rapid" -> if (score >= rapidCost) {
                     score -= rapidCost
                     shotCooldownNanos =
                         (shotCooldownNanos * 0.85f).toLong().coerceAtLeast(160_000_000L)
+                    purchased = true
                 }
 
                 "engine" -> if (score >= engineCost) {
                     score -= engineCost
                     moveSpeedMultiplier = (moveSpeedMultiplier + 0.15f).coerceAtMost(2.2f)
+                    purchased = true
                 }
 
                 "hull" -> if (score >= hullCost) {
                     score -= hullCost
                     damageTakenMultiplier = (damageTakenMultiplier * 0.9f).coerceAtLeast(0.45f)
+                    purchased = true
                 }
 
                 "repair" -> if (score >= repairCost) {
                     score -= repairCost
                     player.currentHealth =
                         (player.currentHealth + 35).coerceAtMost(player.maxHealth)
+                    purchased = true
                 }
 
                 "reroll" -> if (score >= rerollCost) {
                     score -= rerollCost
+                    AudioManager.playShopPurchase()
                     closeShopDialog()
                     // Open a fresh dialog with newly rolled prices.
                     showShopDialog()
                     return
                 }
             }
+            if (purchased) AudioManager.playShopPurchase()
             closeShopDialog()
         }
 

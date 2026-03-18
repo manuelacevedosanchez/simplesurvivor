@@ -19,12 +19,16 @@ import com.badlogic.gdx.scenes.scene2d.ui.TextButton
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener
 import com.badlogic.gdx.utils.viewport.ScreenViewport
 import es.masmultimedia.game.SimpleSurvivorGame
+import es.masmultimedia.utils.AudioManager
 
 class MainMenuScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor {
     private val stage = Stage(ScreenViewport())
     private lateinit var backgroundTexture: Texture
 
     override fun show() {
+        // Start menu music
+        AudioManager.playMenuMusic()
+
         val skin = Skin(Gdx.files.internal("uiskin.json"))
 
         // Obtener el ancho y alto de la pantalla
@@ -70,6 +74,7 @@ class MainMenuScreen(private val game: SimpleSurvivorGame) : Screen, InputProces
         // Añadir listeners a los botones
         playButton.addListener(object : ClickListener() {
             override fun clicked(event: InputEvent?, x: Float, y: Float) {
+                AudioManager.playButtonClick()
                 game.screen = GameScreen(game)
                 dispose()
             }
@@ -77,6 +82,7 @@ class MainMenuScreen(private val game: SimpleSurvivorGame) : Screen, InputProces
 
         highScoresButton.addListener(object : ClickListener() {
             override fun clicked(event: InputEvent?, x: Float, y: Float) {
+                AudioManager.playButtonClick()
                 game.screen = HighScoresScreen(game)
                 dispose()
             }
@@ -84,6 +90,7 @@ class MainMenuScreen(private val game: SimpleSurvivorGame) : Screen, InputProces
 
         exitButton.addListener(object : ClickListener() {
             override fun clicked(event: InputEvent?, x: Float, y: Float) {
+                AudioManager.playButtonClick()
                 Gdx.app.exit()
             }
         })
