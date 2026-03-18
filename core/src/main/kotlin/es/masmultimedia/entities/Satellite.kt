@@ -20,7 +20,7 @@ class Satellite(
     private val shotDirection = Vector2()
     var position = Vector2(player.position.x, player.position.y)
 
-    fun update(delta: Float, enemies: List<Enemy>, projectiles: MutableList<Projectile>) {
+    fun update(delta: Float, enemies: List<ProceduralEnemy>, projectiles: MutableList<Projectile>) {
         // Orbit around the player
         angle += 90f * delta // Angular speed in degrees per second
         val rad = Math.toRadians(angle.toDouble())

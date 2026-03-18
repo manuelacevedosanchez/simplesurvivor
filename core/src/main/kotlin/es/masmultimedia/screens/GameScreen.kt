@@ -25,12 +25,12 @@ import com.badlogic.gdx.scenes.scene2d.ui.Touchpad
 import com.badlogic.gdx.utils.Align
 import com.badlogic.gdx.utils.TimeUtils
 import com.badlogic.gdx.utils.viewport.ScreenViewport
-import es.masmultimedia.entities.Enemy
-import es.masmultimedia.entities.EnemyFactory
-import es.masmultimedia.entities.EnemyType
 import es.masmultimedia.entities.Drone
+import es.masmultimedia.entities.EnemyType
 import es.masmultimedia.entities.LaserProjectile
 import es.masmultimedia.entities.PowerUp
+import es.masmultimedia.entities.ProceduralEnemy
+import es.masmultimedia.entities.ProceduralEnemyFactory
 import es.masmultimedia.entities.Projectile
 import es.masmultimedia.entities.ProjectileFactory
 import es.masmultimedia.entities.Satellite
@@ -63,7 +63,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
     private var score = 0
     private var isPaused = false
 
-    private val enemies = mutableListOf<Enemy>()
+    private val enemies = mutableListOf<ProceduralEnemy>()
     private val projectiles = mutableListOf<Projectile>()
     private val skin = Skin(Gdx.files.internal("uiskin.json"))
 
@@ -459,6 +459,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         val timeSlowFactor = player.getTimeSlowFactor()
         while (enemyIterator.hasNext()) {
             val enemy = enemyIterator.next()
+            enemy.update(delta)
             enemy.moveTowards(player.position, timeSlowFactor)
 
             if (enemy.bounds.overlaps(playerBounds)) {
@@ -609,14 +610,15 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         for (pu in powerUps) {
             pu.render(shapeRenderer)
         }
+        // Render procedural enemies
+        for (enemy in enemies) {
+            enemy.render(shapeRenderer)
+        }
         shapeRenderer.end()
 
         spriteBatch.projectionMatrix = camera.combined
         spriteBatch.begin()
         player.render(spriteBatch)
-        for (enemy in enemies) {
-            enemy.render(spriteBatch)
-        }
         satellite?.render(spriteBatch)
         for (drone in drones) {
             drone.render(spriteBatch)
@@ -818,7 +820,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         val spawnY = player.position.y + distance * sin(angle).toFloat()
 
         val enemyType = getRandomEnemyType()
-        val newEnemy = EnemyFactory.createEnemy(enemyType, Vector2(spawnX, spawnY))
+        val newEnemy = ProceduralEnemyFactory.createEnemy(enemyType, Vector2(spawnX, spawnY))
         enemies.add(newEnemy)
         return true
     }
@@ -864,7 +866,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
         return false
     }
 
-    private fun killEnemy(enemy: Enemy, enemyIterator: MutableIterator<Enemy>) {
+    private fun killEnemy(enemy: ProceduralEnemy, enemyIterator: MutableIterator<ProceduralEnemy>) {
         enemyIterator.remove()
 
         val enemyScore = when (enemy.type) {
@@ -922,36 +924,36 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
      * Stronger enemies have better chances of dropping rare power-ups.
      */
     private fun selectWeightedPowerUp(enemyType: EnemyType): PowerUp.Type {
-        // Multiplicador de rareza según el tipo de enemigo
+        // Rarity multiplier based on enemy type
         val rarityBoost = when (enemyType) {
-            EnemyType.NORMAL -> 0.8f  // Más comunes
-            EnemyType.FAST -> 1.0f    // Normal
-            EnemyType.STRONG -> 1.3f  // Más raros
+            EnemyType.NORMAL -> 0.8f  // More common drops
+            EnemyType.FAST -> 1.0f    // Normal drops
+            EnemyType.STRONG -> 1.4f  // Rarer drops (better quality)
         }
 
-        // Categorías favorecidas por cada tipo de enemigo
+        // Category boost based on enemy type
         val categoryBoost = when (enemyType) {
             EnemyType.NORMAL -> mapOf(
-                PowerUp.Category.DEFENSIVE to 1.5f,
-                PowerUp.Category.OFFENSIVE to 1.0f,
-                PowerUp.Category.UTILITY to 0.8f,
-                PowerUp.Category.SPECIAL to 0.7f
+                PowerUp.Category.DEFENSIVE to 1.6f,   // Favors health/defense
+                PowerUp.Category.OFFENSIVE to 0.9f,
+                PowerUp.Category.UTILITY to 0.7f,
+                PowerUp.Category.SPECIAL to 0.5f
             )
             EnemyType.FAST -> mapOf(
                 PowerUp.Category.DEFENSIVE to 1.0f,
-                PowerUp.Category.OFFENSIVE to 1.3f,
+                PowerUp.Category.OFFENSIVE to 1.4f,   // Favors offensive
                 PowerUp.Category.UTILITY to 1.2f,
-                PowerUp.Category.SPECIAL to 0.9f
+                PowerUp.Category.SPECIAL to 0.8f
             )
             EnemyType.STRONG -> mapOf(
-                PowerUp.Category.DEFENSIVE to 0.8f,
-                PowerUp.Category.OFFENSIVE to 1.2f,
+                PowerUp.Category.DEFENSIVE to 0.7f,
+                PowerUp.Category.OFFENSIVE to 1.3f,
                 PowerUp.Category.UTILITY to 1.0f,
-                PowerUp.Category.SPECIAL to 1.5f
+                PowerUp.Category.SPECIAL to 1.8f      // Favors special/rare
             )
         }
 
-        // Calcular pesos finales
+        // Calculate final weights
         val weights = PowerUp.Type.entries.map { type ->
             val baseWeight = type.rarity * 100
             val catBoost = categoryBoost[type.category] ?: 1.0f

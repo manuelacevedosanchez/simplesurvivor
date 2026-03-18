@@ -19,7 +19,7 @@ class LaserProjectile(
     size = 2f
 ) {
     private val startTime = TimeUtils.millis()
-    private val hitEnemies = mutableSetOf<Enemy>()
+    private val hitEnemies = mutableSetOf<ProceduralEnemy>()
     private val laserDirection = direction.cpy().apply {
         if (len2() == 0f) {
             set(1f, 0f)
@@ -57,7 +57,7 @@ class LaserProjectile(
         return endPoint.set(origin).mulAdd(laserDirection, length)
     }
 
-    fun tryHit(enemy: Enemy) {
+    fun tryHit(enemy: ProceduralEnemy) {
         if (!hitEnemies.contains(enemy)) {
             enemy.takeDamage(power)
             hitEnemies.add(enemy)

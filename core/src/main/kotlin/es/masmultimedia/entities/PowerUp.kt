@@ -34,44 +34,45 @@ class PowerUp(
     }
 
     /**
-     * Categorías de power-ups para organizar y balancear drops
+     * Power-up categories for organizing and balancing drops
      */
     enum class Category {
-        OFFENSIVE,  // Mejoras de ataque
-        DEFENSIVE,  // Protección y supervivencia
-        UTILITY,    // Utilidades varias
-        SPECIAL     // Efectos únicos
+        OFFENSIVE,  // Attack improvements
+        DEFENSIVE,  // Protection and survival
+        UTILITY,    // Various utilities
+        SPECIAL     // Unique effects
     }
 
     /**
-     * Tipos de power-ups disponibles
+     * Available power-up types with balanced rarity weights.
+     * Higher rarity = more common. Permanent power-ups are rarer.
      */
     enum class Type(val category: Category, val duration: Long, val rarity: Float) {
-        // === OFENSIVOS ===
-        TRIPLE_SHOT(Category.OFFENSIVE, -1L, 0.15f),           // Permanente, común
-        CHARGED_SHOT(Category.OFFENSIVE, -1L, 0.12f),          // Permanente, poco común
-        LASER(Category.OFFENSIVE, -1L, 0.08f),                 // Permanente, raro
-        RAPID_FIRE(Category.OFFENSIVE, 8000L, 0.12f),          // 8 seg, poco común
-        PIERCING(Category.OFFENSIVE, 10000L, 0.10f),           // 10 seg, raro
-        HOMING(Category.OFFENSIVE, 8000L, 0.06f),              // 8 seg, muy raro
-        BOMB(Category.OFFENSIVE, 0L, 0.05f),                   // Instantáneo, muy raro
+        // === OFFENSIVE ===
+        TRIPLE_SHOT(Category.OFFENSIVE, -1L, 0.06f),           // Permanent, rare
+        CHARGED_SHOT(Category.OFFENSIVE, -1L, 0.05f),          // Permanent, rare
+        LASER(Category.OFFENSIVE, -1L, 0.04f),                 // Permanent, very rare
+        RAPID_FIRE(Category.OFFENSIVE, 8000L, 0.10f),          // 8 sec, uncommon
+        PIERCING(Category.OFFENSIVE, 10000L, 0.08f),           // 10 sec, uncommon
+        HOMING(Category.OFFENSIVE, 8000L, 0.05f),              // 8 sec, rare
+        BOMB(Category.OFFENSIVE, 0L, 0.03f),                   // Instant, very rare
 
-        // === DEFENSIVOS ===
-        HEALTH(Category.DEFENSIVE, 0L, 0.20f),                 // Instantáneo, muy común
-        SHIELD(Category.DEFENSIVE, 5000L, 0.12f),              // 5 seg, poco común
-        SPEED_BOOST(Category.DEFENSIVE, 6000L, 0.14f),         // 6 seg, común
-        REGENERATION(Category.DEFENSIVE, 8000L, 0.08f),        // 8 seg, raro
-        INVINCIBILITY(Category.DEFENSIVE, 3000L, 0.04f),       // 3 seg, muy raro
+        // === DEFENSIVE ===
+        HEALTH(Category.DEFENSIVE, 0L, 0.25f),                 // Instant, very common
+        SHIELD(Category.DEFENSIVE, 5000L, 0.10f),              // 5 sec, uncommon
+        SPEED_BOOST(Category.DEFENSIVE, 6000L, 0.12f),         // 6 sec, common
+        REGENERATION(Category.DEFENSIVE, 8000L, 0.06f),        // 8 sec, rare
+        INVINCIBILITY(Category.DEFENSIVE, 3000L, 0.03f),       // 3 sec, very rare
 
-        // === UTILIDAD ===
-        MAGNET(Category.UTILITY, 10000L, 0.10f),               // 10 seg, raro
-        SCORE_MULTIPLIER(Category.UTILITY, 15000L, 0.08f),     // 15 seg, raro
-        TIME_SLOW(Category.UTILITY, 5000L, 0.06f),             // 5 seg, muy raro
+        // === UTILITY ===
+        MAGNET(Category.UTILITY, 10000L, 0.08f),               // 10 sec, uncommon
+        SCORE_MULTIPLIER(Category.UTILITY, 15000L, 0.07f),     // 15 sec, uncommon
+        TIME_SLOW(Category.UTILITY, 5000L, 0.04f),             // 5 sec, rare
 
-        // === ESPECIALES ===
-        SATELLITE(Category.SPECIAL, -1L, 0.08f),               // Permanente, raro
-        DRONE(Category.SPECIAL, -1L, 0.06f),                   // Permanente, muy raro
-        MIRROR_SHOT(Category.SPECIAL, 12000L, 0.07f);          // 12 seg, raro
+        // === SPECIAL ===
+        SATELLITE(Category.SPECIAL, -1L, 0.04f),               // Permanent, very rare
+        DRONE(Category.SPECIAL, -1L, 0.03f),                   // Permanent, very rare
+        MIRROR_SHOT(Category.SPECIAL, 12000L, 0.05f);          // 12 sec, rare
 
         fun isPermanent(): Boolean = duration == -1L
         fun isInstant(): Boolean = duration == 0L

@@ -32,7 +32,7 @@ class Drone(
     private val followDistance = 50f
     private val followSpeed = 8f // Velocidad de seguimiento suave
 
-    fun update(delta: Float, enemies: List<Enemy>, projectiles: MutableList<Projectile>) {
+    fun update(delta: Float, enemies: List<ProceduralEnemy>, projectiles: MutableList<Projectile>) {
         // Calcular posición objetivo (detrás/al lado del jugador)
         val rad = Math.toRadians((player.rotation + offsetAngle).toDouble())
         val targetX = player.position.x - followDistance * kotlin.math.cos(rad).toFloat()

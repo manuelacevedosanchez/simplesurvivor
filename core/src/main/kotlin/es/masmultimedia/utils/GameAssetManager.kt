@@ -39,11 +39,6 @@ object GameAssetManager {
             "fast_spaceship.png",
             "strong_spaceship.png",
 
-            // Enemy textures
-            "enemy_base.png",
-            "enemy_normal.png",
-            "fast_enemy.png",
-            "strong_enemy.png",
 
             // UI and background textures
             "menu_background.png",
