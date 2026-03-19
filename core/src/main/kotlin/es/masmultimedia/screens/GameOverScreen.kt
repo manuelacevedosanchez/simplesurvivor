@@ -91,7 +91,7 @@ class GameOverScreen(
             override fun clicked(event: InputEvent?, x: Float, y: Float) {
                 val playerName = nameTextField.text
                 if (playerName.isNotEmpty()) {
-                    highScoreManager.addHighScore(playerName, score)
+                    highScoreManager.addHighScore(playerName, score, timePlayed)
                     showSavedDialog(skin, bodyFont)
                 }
             }
