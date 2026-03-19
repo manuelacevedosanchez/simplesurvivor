@@ -41,6 +41,7 @@ import es.masmultimedia.game.SimpleSurvivorGame
 import es.masmultimedia.utils.AudioManager
 import es.masmultimedia.utils.Constants
 import es.masmultimedia.utils.GameAssetManager
+import es.masmultimedia.utils.GameSettings
 import es.masmultimedia.utils.I18n
 import es.masmultimedia.utils.JoystickRenderer
 import es.masmultimedia.utils.intersectsSegment
@@ -190,7 +191,7 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
             knob = null
         }
 
-        val touchpadSize = screenWidth * 0.18f // Slightly larger for better usability
+        val touchpadSize = screenWidth * 0.18f * GameSettings.joystickSize
 
         // Example: movement touchpad in the bottom-left corner
         // Place it with a left margin and a bottom margin
@@ -472,12 +473,14 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
                 val contactDamage = (20f * damageTakenMultiplier).toInt().coerceAtLeast(1)
                 player.takeDamage(contactDamage)
                 AudioManager.playHit()
+                GameSettings.vibrate(30)
                 enemyIterator.remove()
                 if (!player.isAlive()) {
                     gameEnded = true
                     gameWon = false
                     gameEndMessage = "¡Juego Terminado!"
                     AudioManager.playGameOver()
+                    GameSettings.vibrate(200)
                     return
                 }
                 continue
@@ -737,6 +740,15 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
 
         hudStage.act(delta)
         hudStage.draw()
+
+        // FPS counter
+        if (GameSettings.showFps) {
+            spriteBatch.projectionMatrix = hudStage.camera.combined
+            spriteBatch.begin()
+            hudFont.color = Color.YELLOW
+            hudFont.draw(spriteBatch, "FPS: ${Gdx.graphics.framesPerSecond}", 10f, Gdx.graphics.height - 10f)
+            spriteBatch.end()
+        }
     }
 
     private fun updateStars(delta: Float) {

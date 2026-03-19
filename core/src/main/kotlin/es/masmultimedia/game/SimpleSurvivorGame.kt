@@ -6,6 +6,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import es.masmultimedia.screens.LoadingScreen
 import es.masmultimedia.utils.AudioManager
 import es.masmultimedia.utils.GameAssetManager
+import es.masmultimedia.utils.GameSettings
 import es.masmultimedia.utils.I18n
 
 class SimpleSurvivorGame : Game() {
@@ -18,6 +19,9 @@ class SimpleSurvivorGame : Game() {
 
         // Initialize audio settings from saved preferences
         AudioManager.init()
+
+        // Initialize game settings from saved preferences
+        GameSettings.init()
 
         // Initialize internationalization
         I18n.init()

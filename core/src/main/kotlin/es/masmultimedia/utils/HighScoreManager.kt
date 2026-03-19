@@ -41,4 +41,9 @@ class HighScoreManager {
         }
         prefs.flush()
     }
+
+    fun clearHighScores() {
+        prefs.clear()
+        prefs.flush()
+    }
 }

@@ -139,6 +139,11 @@ object I18n {
         const val LANGUAGE = "language"
         const val ON = "on"
         const val OFF = "off"
+        const val SOUND_VOLUME = "sound_volume"
+        const val MUSIC_VOLUME = "music_volume"
+        const val LANG_EN = "lang_en"
+        const val LANG_ES = "lang_es"
+        const val LANG_PT = "lang_pt"
 
         // Shop
         const val SHOP = "shop"

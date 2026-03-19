@@ -96,6 +96,14 @@ class MainMenuScreen(private val game: SimpleSurvivorGame) : Screen, InputProces
             }
         })
 
+        settingsButton.addListener(object : ClickListener() {
+            override fun clicked(event: InputEvent?, x: Float, y: Float) {
+                AudioManager.playButtonClick()
+                game.screen = SettingsScreen(game)
+                dispose()
+            }
+        })
+
         infoButton.addListener(object : ClickListener() {
             override fun clicked(event: InputEvent?, x: Float, y: Float) {
                 AudioManager.playButtonClick()
