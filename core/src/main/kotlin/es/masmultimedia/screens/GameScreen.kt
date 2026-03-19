@@ -21,6 +21,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.Dialog
 import com.badlogic.gdx.scenes.scene2d.ui.Label
 import com.badlogic.gdx.scenes.scene2d.ui.Skin
 import com.badlogic.gdx.scenes.scene2d.ui.Table
+import com.badlogic.gdx.scenes.scene2d.ui.TextButton
 import com.badlogic.gdx.scenes.scene2d.ui.Touchpad
 import com.badlogic.gdx.utils.Align
 import com.badlogic.gdx.utils.TimeUtils
@@ -40,6 +41,7 @@ import es.masmultimedia.game.SimpleSurvivorGame
 import es.masmultimedia.utils.AudioManager
 import es.masmultimedia.utils.Constants
 import es.masmultimedia.utils.GameAssetManager
+import es.masmultimedia.utils.I18n
 import es.masmultimedia.utils.JoystickRenderer
 import es.masmultimedia.utils.intersectsSegment
 import ktx.math.random
@@ -776,8 +778,36 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
     }
 
     private fun showPauseMenu() {
-        val dialog = object : Dialog("Pausa", skin) {
+        val generator = FreeTypeFontGenerator(Gdx.files.internal("wheaton_capitals.otf"))
+        val titleFont = generator.generateFont(FreeTypeFontGenerator.FreeTypeFontParameter().apply {
+            size = (Gdx.graphics.height * 0.05f).toInt().coerceAtLeast(22)
+            color = Color.WHITE
+        })
+        val bodyFont = generator.generateFont(FreeTypeFontGenerator.FreeTypeFontParameter().apply {
+            size = (Gdx.graphics.height * 0.035f).toInt().coerceAtLeast(16)
+            color = Color.WHITE
+        })
+        generator.dispose()
+
+        val dialogSkin = Skin(Gdx.files.internal("uiskin.json"))
+        val titleStyle = Label.LabelStyle(titleFont, Color.WHITE)
+        val bodyStyle = Label.LabelStyle(bodyFont, Color.WHITE)
+        val buttonStyle = TextButton.TextButtonStyle().apply {
+            up = dialogSkin.getDrawable("default-round")
+            down = dialogSkin.getDrawable("default-round-down")
+            font = bodyFont
+        }
+
+        val screenW = Gdx.graphics.width.toFloat()
+        val screenH = Gdx.graphics.height.toFloat()
+        val btnWidth = screenW * 0.4f
+        val btnHeight = screenH * 0.08f
+        val pad = screenH * 0.025f
+
+        val dialog = object : Dialog("", dialogSkin) {
             override fun result(obj: Any?) {
+                titleFont.dispose()
+                bodyFont.dispose()
                 if (obj == null) return
                 if (obj as Boolean) {
                     isPaused = false
@@ -788,9 +818,12 @@ class GameScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor 
                 }
             }
         }
-        dialog.text("Juego en pausa")
-        dialog.button("Reanudar", true)
-        dialog.button("Salir al menú", false)
+
+        dialog.contentTable.add(Label(I18n.get("paused"), titleStyle)).padBottom(pad).row()
+        dialog.buttonTable.defaults().width(btnWidth).height(btnHeight).pad(pad * 0.4f)
+        dialog.button(TextButton(I18n.get("resume"), buttonStyle), true)
+        dialog.buttonTable.row()
+        dialog.button(TextButton(I18n.get("main_menu"), buttonStyle), false)
         dialog.show(stage)
     }
 

@@ -20,6 +20,7 @@ import com.badlogic.gdx.scenes.scene2d.utils.ClickListener
 import com.badlogic.gdx.utils.viewport.ScreenViewport
 import es.masmultimedia.game.SimpleSurvivorGame
 import es.masmultimedia.utils.AudioManager
+import es.masmultimedia.utils.I18n
 
 class MainMenuScreen(private val game: SimpleSurvivorGame) : Screen, InputProcessor {
     private val stage = Stage(ScreenViewport())
@@ -91,7 +92,7 @@ class MainMenuScreen(private val game: SimpleSurvivorGame) : Screen, InputProces
         exitButton.addListener(object : ClickListener() {
             override fun clicked(event: InputEvent?, x: Float, y: Float) {
                 AudioManager.playButtonClick()
-                Gdx.app.exit()
+                showExitConfirmDialog()
             }
         })
 
@@ -169,24 +170,56 @@ class MainMenuScreen(private val game: SimpleSurvivorGame) : Screen, InputProces
 
     override fun keyDown(keycode: Int): Boolean {
         if (keycode == Input.Keys.BACK || keycode == Input.Keys.ESCAPE) {
-            // Mostrar diálogo de confirmación para salir
-            val dialog = object : Dialog("Salir", Skin(Gdx.files.internal("uiskin.json"))) {
-                override fun result(result: Any?) {
-                    if (result == null) return
-                    if (result as Boolean) {
-                        Gdx.app.exit()
-                    } else {
-                        hide()
-                    }
-                }
-            }
-            dialog.text("¿Deseas salir del juego?")
-            dialog.button("Sí", true)
-            dialog.button("No", false)
-            dialog.show(stage)
+            showExitConfirmDialog()
             return true
         }
         return false
+    }
+
+    private fun showExitConfirmDialog() {
+        val generator = FreeTypeFontGenerator(Gdx.files.internal("wheaton_capitals.otf"))
+        val dialogTitleFont = generator.generateFont(FreeTypeFontGenerator.FreeTypeFontParameter().apply {
+            size = (Gdx.graphics.height * 0.05f).toInt().coerceAtLeast(22)
+            color = Color.WHITE
+        })
+        val dialogBodyFont = generator.generateFont(FreeTypeFontGenerator.FreeTypeFontParameter().apply {
+            size = (Gdx.graphics.height * 0.035f).toInt().coerceAtLeast(16)
+            color = Color.WHITE
+        })
+        generator.dispose()
+
+        val dialogSkin = Skin(Gdx.files.internal("uiskin.json"))
+        val dialogTitleStyle = Label.LabelStyle(dialogTitleFont, Color.WHITE)
+        val dialogButtonStyle = TextButton.TextButtonStyle().apply {
+            up = dialogSkin.getDrawable("default-round")
+            down = dialogSkin.getDrawable("default-round-down")
+            font = dialogBodyFont
+        }
+
+        val screenW = Gdx.graphics.width.toFloat()
+        val screenH = Gdx.graphics.height.toFloat()
+        val btnWidth = screenW * 0.3f
+        val btnHeight = screenH * 0.08f
+        val pad = screenH * 0.025f
+
+        val dialog = object : Dialog("", dialogSkin) {
+            override fun result(result: Any?) {
+                dialogTitleFont.dispose()
+                dialogBodyFont.dispose()
+                if (result == null) return
+                if (result as Boolean) {
+                    Gdx.app.exit()
+                } else {
+                    hide()
+                }
+            }
+        }
+
+        dialog.contentTable.add(Label(I18n.get("exit_confirm"), dialogTitleStyle)).pad(pad).row()
+        dialog.buttonTable.defaults().width(btnWidth).height(btnHeight).pad(pad * 0.4f)
+        dialog.button(TextButton(I18n.get("yes"), dialogButtonStyle), true)
+        dialog.button(TextButton(I18n.get("no"), dialogButtonStyle), false)
+        dialog.show(stage)
     }
 
     override fun keyUp(keycode: Int): Boolean = false
