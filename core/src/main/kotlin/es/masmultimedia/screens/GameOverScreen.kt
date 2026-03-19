@@ -21,6 +21,7 @@ import com.badlogic.gdx.utils.viewport.ScreenViewport
 import es.masmultimedia.game.SimpleSurvivorGame
 import es.masmultimedia.utils.AudioManager
 import es.masmultimedia.utils.HighScoreManager
+import es.masmultimedia.utils.I18n
 
 class GameOverScreen(
     private val game: SimpleSurvivorGame,
@@ -149,10 +150,23 @@ class GameOverScreen(
     }
 
     private fun showSavedDialog(skin: Skin, bodyFont: com.badlogic.gdx.graphics.g2d.BitmapFont) {
-        val dialog = Dialog("Puntuación Guardada", skin)
-        val bodyStyle = Label.LabelStyle(bodyFont, com.badlogic.gdx.graphics.Color.WHITE)
-        dialog.contentTable.add(Label("¡Tu puntuación ha sido guardada!", bodyStyle)).pad(20f)
-        dialog.button("OK")
+        val bodyStyle = Label.LabelStyle(bodyFont, Color.WHITE)
+        val dialogButtonStyle = TextButton.TextButtonStyle().apply {
+            up = skin.getDrawable("default-round")
+            down = skin.getDrawable("default-round-down")
+            font = bodyFont
+        }
+
+        val screenW = Gdx.graphics.width.toFloat()
+        val screenH = Gdx.graphics.height.toFloat()
+        val pad = screenH * 0.03f
+        val btnWidth = screenW * 0.25f
+        val btnHeight = screenH * 0.08f
+
+        val dialog = Dialog("", skin)
+        dialog.contentTable.add(Label(I18n.get("score_saved"), bodyStyle)).pad(pad).row()
+        dialog.buttonTable.defaults().width(btnWidth).height(btnHeight).pad(pad * 0.4f)
+        dialog.button(TextButton("OK", dialogButtonStyle), true)
         dialog.show(stage)
     }
 
